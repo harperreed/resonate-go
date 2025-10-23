@@ -27,10 +27,17 @@ type DeviceInfo struct {
 
 // PlayerSupport describes player capabilities
 type PlayerSupport struct {
-	Codecs      []string `json:"codecs"`
-	SampleRates []int    `json:"sample_rates"`
-	Channels    []int    `json:"channels"`
-	BitDepths   []int    `json:"bit_depths"`
+	SupportFormats     []AudioFormat `json:"support_formats"`
+	BufferCapacity     int           `json:"buffer_capacity,omitempty"`
+	SupportedCommands  []string      `json:"supported_commands,omitempty"`
+}
+
+// AudioFormat describes a supported audio format
+type AudioFormat struct {
+	Codec      string `json:"codec"`
+	Channels   int    `json:"channels"`
+	SampleRate int    `json:"sample_rate"`
+	BitDepth   int    `json:"bit_depth"`
 }
 
 // ServerHello is the server's response to client/hello

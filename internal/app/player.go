@@ -126,10 +126,13 @@ func (p *Player) connect(serverAddr string) error {
 			SoftwareVersion: version.Version,
 		},
 		PlayerSupport: protocol.PlayerSupport{
-			Codecs:      []string{"opus", "flac", "pcm"},
-			SampleRates: []int{44100, 48000},
-			Channels:    []int{1, 2},
-			BitDepths:   []int{16, 24},
+			SupportFormats: []protocol.AudioFormat{
+				{Codec: "opus", Channels: 2, SampleRate: 48000, BitDepth: 16},
+				{Codec: "flac", Channels: 2, SampleRate: 48000, BitDepth: 16},
+				{Codec: "pcm", Channels: 2, SampleRate: 48000, BitDepth: 16},
+			},
+			BufferCapacity:    1048576,
+			SupportedCommands: []string{"volume", "mute"},
 		},
 	}
 
