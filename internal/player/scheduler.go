@@ -50,6 +50,16 @@ func (s *Scheduler) Schedule(buf audio.Buffer) {
 	// Convert server timestamp to local play time
 	buf.PlayAt = s.clockSync.ServerToLocalTime(buf.Timestamp)
 
+	// Log first few buffers and problematic ones
+	if s.stats.Received < 5 {
+		now := time.Now()
+		delay := buf.PlayAt.Sub(now)
+		offset, rtt, _ := s.clockSync.GetStats()
+
+		log.Printf("Scheduled buffer #%d: timestamp=%d, delay=%v, offset=%dμs, rtt=%dμs",
+			s.stats.Received, buf.Timestamp, delay, offset, rtt)
+	}
+
 	s.stats.Received++
 	heap.Push(s.bufferQ, buf)
 }

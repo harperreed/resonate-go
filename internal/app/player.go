@@ -150,12 +150,46 @@ func (p *Player) connect(serverAddr string) error {
 
 	log.Printf("Connected to server: %s", serverAddr)
 
+	// Perform initial clock sync before starting audio handlers
+	if err := p.performInitialSync(); err != nil {
+		log.Printf("Initial clock sync failed: %v", err)
+	}
+
 	// Start component goroutines
 	go p.handleAudioChunks()
 	go p.handleControls()
 	go p.handleStreamStart()
 	go p.handleMetadata()
 	go p.clockSyncLoop()
+
+	return nil
+}
+
+// performInitialSync does multiple sync rounds before audio starts
+func (p *Player) performInitialSync() error {
+	log.Printf("Performing initial clock synchronization...")
+
+	// Do 5 quick sync rounds to establish offset
+	for i := 0; i < 5; i++ {
+		t1 := sync.CurrentMicros()
+		p.client.SendTimeSync(t1)
+
+		// Wait for response with timeout
+		select {
+		case resp := <-p.client.TimeSyncResp:
+			t4 := sync.CurrentMicros()
+			p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
+
+		case <-time.After(500 * time.Millisecond):
+			log.Printf("Initial sync round %d timeout", i+1)
+		}
+
+		// Brief pause between syncs
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	offset, rtt, quality := p.clockSync.GetStats()
+	log.Printf("Initial clock sync complete: offset=%dμs, rtt=%dμs, quality=%v", offset, rtt, quality)
 
 	return nil
 }
