@@ -14,10 +14,8 @@ import (
 	"github.com/Resonate-Protocol/resonate-go/internal/player"
 	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
 	"github.com/Resonate-Protocol/resonate-go/internal/sync"
-	"github.com/Resonate-Protocol/resonate-go/internal/ui"
 	"github.com/Resonate-Protocol/resonate-go/internal/version"
 	"github.com/google/uuid"
-	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Config holds player configuration
@@ -37,7 +35,6 @@ type Player struct {
 	output    *player.Output
 	discovery *discovery.Manager
 	decoder   audio.Decoder
-	tuiProg   *tea.Program
 	ctx       context.Context
 	cancel    context.CancelFunc
 }
@@ -57,14 +54,15 @@ func New(config Config) *Player {
 
 // Start starts the player
 func (p *Player) Start() error {
-	// Start TUI
-	tuiProg, err := ui.Run()
-	if err != nil {
-		return fmt.Errorf("failed to start TUI: %w", err)
-	}
-	p.tuiProg = tuiProg
+	// TUI temporarily disabled for debugging
+	// tuiProg, err := ui.Run()
+	// if err != nil {
+	// 	return fmt.Errorf("failed to start TUI: %w", err)
+	// }
+	// p.tuiProg = tuiProg
+	// go p.tuiProg.Run()
 
-	go p.tuiProg.Run()
+	log.Printf("TUI disabled - logging to file for debugging")
 
 	// Start discovery if no manual server
 	if p.config.ServerAddr == "" {
@@ -362,9 +360,5 @@ func (p *Player) Stop() {
 
 	if p.output != nil {
 		p.output.Close()
-	}
-
-	if p.tuiProg != nil {
-		p.tuiProg.Quit()
 	}
 }
