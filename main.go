@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/Resonate-Protocol/resonate-go/internal/app"
 )
 
 var (
@@ -40,10 +44,31 @@ func main() {
 	}
 
 	log.Printf("Starting Resonate Player: %s", playerName)
-	fmt.Printf("Resonate Player starting...\n")
-	fmt.Printf("Name: %s\n", playerName)
-	fmt.Printf("Port: %d\n", *port)
-	fmt.Printf("Buffer: %dms\n", *bufferMs)
 
-	// TODO: Start player
+	// Create player
+	config := app.Config{
+		ServerAddr: *serverAddr,
+		Port:       *port,
+		Name:       playerName,
+		BufferMs:   *bufferMs,
+	}
+
+	player := app.New(config)
+
+	// Handle shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		log.Printf("Shutdown signal received")
+		player.Stop()
+	}()
+
+	// Start player
+	if err := player.Start(); err != nil {
+		log.Fatalf("Player error: %v", err)
+	}
+
+	log.Printf("Player stopped")
 }

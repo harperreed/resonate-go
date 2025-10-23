@@ -5,7 +5,6 @@ package ui
 import (
 	"fmt"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
 	"github.com/Resonate-Protocol/resonate-go/internal/sync"
 	tea "github.com/charmbracelet/bubbletea"
 )
