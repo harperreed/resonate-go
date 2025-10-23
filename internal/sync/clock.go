@@ -55,6 +55,16 @@ func (cs *ClockSync) ProcessSyncResponse(t1, t2, t3, t4 int64) {
 		log.Printf("Calculated: rtt=%dμs, raw_offset=%dμs", rtt, offset)
 	}
 
+	// HACK: On first sync, set the global offset to match server's clock
+	// This works around aioresonate's bug where it doesn't use clock sync
+	// when checking if chunks are late
+	if cs.sampleCount == 0 && hackOffset == 0 {
+		// The offset tells us how far ahead the server is
+		// We add this to our future timestamps to match their clock
+		hackOffset = offset
+		log.Printf("HACK: Set clock offset to %dμs to match server monotonic clock", hackOffset)
+	}
+
 	// Discard samples with high RTT (network congestion)
 	if rtt > 100000 { // 100ms
 		log.Printf("Discarding sync sample: high RTT %dμs", rtt)
@@ -131,11 +141,20 @@ func (cs *ClockSync) ServerToLocalTime(serverTime int64) time.Time {
 }
 
 // CurrentMicros returns current monotonic time in microseconds
-// This uses time.Since with a global start time to match the server's monotonic clock
-// We artificially start from Unix epoch to minimize offset with long-running servers
+// HACK: We add a global offset to our monotonic time to match the server's clock
+// This works around a bug in aioresonate where it checks chunk lateness against
+// its own loop.time() without accounting for clock synchronization
 func CurrentMicros() int64 {
-	// Use wall clock microseconds instead of monotonic to match server expectations
-	return time.Now().UnixNano() / 1000
+	// Our real monotonic time since process start
+	realMicros := int64(time.Since(startTime) / time.Microsecond)
+
+	// Add the hack offset to pretend we started when the server did
+	return realMicros + hackOffset
 }
 
-// Removed startTime - using Unix epoch instead
+// startTime is when our process started
+var startTime = time.Now()
+
+// hackOffset is added to our monotonic time to match server's clock
+// It gets set after the first time sync response
+var hackOffset int64
