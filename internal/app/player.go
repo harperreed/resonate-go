@@ -232,14 +232,20 @@ func (p *Player) handleStreamStart() {
 	for {
 		select {
 		case start := <-p.client.StreamStart:
+			// Check if player field exists
+			if start.Player == nil {
+				log.Printf("Received stream/start with no player info")
+				continue
+			}
+
 			log.Printf("Stream starting: %s %dHz %dch %dbit",
-				start.Codec, start.SampleRate, start.Channels, start.BitDepth)
+				start.Player.Codec, start.Player.SampleRate, start.Player.Channels, start.Player.BitDepth)
 
 			format := audio.Format{
-				Codec:      start.Codec,
-				SampleRate: start.SampleRate,
-				Channels:   start.Channels,
-				BitDepth:   start.BitDepth,
+				Codec:      start.Player.Codec,
+				SampleRate: start.Player.SampleRate,
+				Channels:   start.Player.Channels,
+				BitDepth:   start.Player.BitDepth,
 			}
 
 			// Initialize decoder

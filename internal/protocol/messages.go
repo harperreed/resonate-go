@@ -68,13 +68,18 @@ type ServerCommand struct {
 	Mute    bool   `json:"mute,omitempty"`
 }
 
-// StreamStart notifies the client of stream format
-type StreamStart struct {
+// StreamStartPlayer contains the audio format details
+type StreamStartPlayer struct {
 	Codec       string `json:"codec"`
 	SampleRate  int    `json:"sample_rate"`
 	Channels    int    `json:"channels"`
 	BitDepth    int    `json:"bit_depth"`
 	CodecHeader string `json:"codec_header,omitempty"` // Base64-encoded
+}
+
+// StreamStart notifies the client of stream format (nested structure)
+type StreamStart struct {
+	Player *StreamStartPlayer `json:"player,omitempty"`
 }
 
 // StreamMetadata contains track information
@@ -83,6 +88,12 @@ type StreamMetadata struct {
 	Artist     string `json:"artist,omitempty"`
 	Album      string `json:"album,omitempty"`
 	ArtworkURL string `json:"artwork_url,omitempty"`
+}
+
+// SessionUpdate notifies client of session state changes
+type SessionUpdate struct {
+	GroupID       string `json:"group_id"`
+	PlaybackState string `json:"playback_state,omitempty"` // "playing" or "idle"
 }
 
 // ClientTime is sent for clock synchronization

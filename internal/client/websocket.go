@@ -260,6 +260,12 @@ func (c *Client) handleJSONMessage(data []byte) {
 		case <-c.ctx.Done():
 		}
 
+	case "session/update":
+		var update protocol.SessionUpdate
+		json.Unmarshal(payloadBytes, &update)
+		log.Printf("Session update: group=%s, state=%s", update.GroupID, update.PlaybackState)
+		// For now, just log it - we could use this to update player state
+
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)
 	}
