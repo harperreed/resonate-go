@@ -134,8 +134,11 @@ func (p *Player) connect(serverAddr string) error {
 			},
 			BufferCapacity:    1048576,
 			SupportedCommands: []string{"volume", "mute"},
-			// Legacy format (Music Assistant compatibility)
-			SupportCodecs:     []string{"opus", "flac", "pcm"},
+			// Legacy format (Music Assistant compatibility - separate arrays)
+			SupportCodecs:      []string{"opus", "flac", "pcm"},
+			SupportChannels:    []int{1, 2},
+			SupportSampleRates: []int{44100, 48000},
+			SupportBitDepths:   []int{16, 24},
 		},
 	}
 

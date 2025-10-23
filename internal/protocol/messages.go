@@ -32,8 +32,11 @@ type PlayerSupport struct {
 	BufferCapacity     int           `json:"buffer_capacity,omitempty"`
 	SupportedCommands  []string      `json:"supported_commands,omitempty"`
 
-	// Legacy fields (Music Assistant compatibility)
+	// Legacy fields (Music Assistant compatibility - uses separate arrays)
 	SupportCodecs      []string      `json:"support_codecs,omitempty"`
+	SupportChannels    []int         `json:"support_channels,omitempty"`
+	SupportSampleRates []int         `json:"support_sample_rates,omitempty"`
+	SupportBitDepths   []int         `json:"support_bit_depths,omitempty"`
 }
 
 // AudioFormat describes a supported audio format
