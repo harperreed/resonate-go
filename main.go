@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -25,13 +26,16 @@ var (
 func main() {
 	flag.Parse()
 
-	// Set up logging
+	// Set up logging to both console and file
 	f, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening log file: %v", err)
 	}
 	defer f.Close()
-	log.SetOutput(f)
+
+	// Log to both stdout and file
+	multiWriter := io.MultiWriter(os.Stdout, f)
+	log.SetOutput(multiWriter)
 
 	// Determine player name
 	playerName := *name
