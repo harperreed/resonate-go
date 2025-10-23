@@ -278,9 +278,13 @@ func (p *Player) handleAudioChunks() {
 		select {
 		case chunk := <-p.client.AudioChunks:
 			chunkCount++
-			if chunkCount <= 3 {
-				log.Printf("Received audio chunk #%d: timestamp=%d, size=%d bytes",
-					chunkCount, chunk.Timestamp, len(chunk.Data))
+
+			// Detailed logging for first few chunks
+			if chunkCount <= 5 {
+				ourTime := sync.CurrentMicros()
+				timeDiff := chunk.Timestamp - ourTime
+				log.Printf("Received audio chunk #%d: chunk_ts=%d, our_time=%d, diff=%dμs",
+					chunkCount, chunk.Timestamp, ourTime, timeDiff)
 			}
 
 			if p.decoder == nil || p.scheduler == nil {

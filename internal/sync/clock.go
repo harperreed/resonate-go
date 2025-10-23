@@ -55,14 +55,31 @@ func (cs *ClockSync) ProcessSyncResponse(t1, t2, t3, t4 int64) {
 		log.Printf("Calculated: rtt=%dμs, raw_offset=%dμs", rtt, offset)
 	}
 
-	// HACK: On first sync, set the global offset to match server's clock
-	// This works around aioresonate's bug where it doesn't use clock sync
-	// when checking if chunks are late
-	if cs.sampleCount == 0 && hackOffset == 0 {
-		// The offset tells us how far ahead the server is
-		// We add this to our future timestamps to match their clock
-		hackOffset = offset
-		log.Printf("HACK: Set clock offset to %dμs to match server monotonic clock", hackOffset)
+	// HACK: On first sync, calculate when server's event loop started in Unix time
+	// This lets us match the server's loop.time() exactly
+	if cs.sampleCount == 0 && serverLoopStartUnix == 0 {
+		// t2 is server's loop.time() in microseconds when it received our request
+		// On first sync, t4 is our monotonic time, so we need to get actual Unix time
+		nowUnix := time.Now().UnixMicro()
+
+		// Account for half RTT: when server sent its response (t3), the Unix time was approx now - rtt/2
+		// But we want Unix time at t2 (when server received our request)
+		// Time from t2 to t3 is (t3 - t2), so work backwards from now
+		unixAtT3 := nowUnix - (rtt / 2)  // Unix time when server sent response
+		unixAtT2 := unixAtT3 - (t3 - t2) // Unix time when server received request
+		serverLoopStartUnix = unixAtT2 - t2
+
+		log.Printf("HACK: Calculated server loop start at Unix time %d", serverLoopStartUnix)
+		log.Printf("HACK: t2=%dμs (server_recv), t3=%dμs (server_sent), rtt=%dμs",
+			t2, t3, rtt)
+		log.Printf("HACK: unix_now=%dμs, unix_at_t3=%dμs, unix_at_t2=%dμs",
+			nowUnix, unixAtT3, unixAtT2)
+
+		// Set our stored offset to zero since we're now perfectly synchronized
+		cs.offset = 0
+		cs.sampleCount++
+		cs.quality = QualityGood
+		return
 	}
 
 	// Discard samples with high RTT (network congestion)
@@ -71,7 +88,8 @@ func (cs *ClockSync) ProcessSyncResponse(t1, t2, t3, t4 int64) {
 		return
 	}
 
-	// Apply exponential smoothing
+	// After the hack is applied, the offset should be near zero
+	// Apply exponential smoothing for fine-tuning
 	if cs.sampleCount == 0 {
 		cs.offset = offset
 	} else {
@@ -140,21 +158,22 @@ func (cs *ClockSync) ServerToLocalTime(serverTime int64) time.Time {
 	return time.Unix(0, localMicros*1000)
 }
 
-// CurrentMicros returns current monotonic time in microseconds
-// HACK: We add a global offset to our monotonic time to match the server's clock
-// This works around a bug in aioresonate where it checks chunk lateness against
-// its own loop.time() without accounting for clock synchronization
+// CurrentMicros returns time in microseconds that matches server's loop.time()
+// HACK: The server uses loop.time() (monotonic) for everything and doesn't account
+// for client clock offset. We match it by using Unix time minus when server started.
 func CurrentMicros() int64 {
-	// Our real monotonic time since process start
-	realMicros := int64(time.Since(startTime) / time.Microsecond)
+	if serverLoopStartUnix == 0 {
+		// Before first sync, use our monotonic time as fallback
+		return int64(time.Since(startTime) / time.Microsecond)
+	}
 
-	// Add the hack offset to pretend we started when the server did
-	return realMicros + hackOffset
+	// Return time that matches server's loop.time() in microseconds
+	return time.Now().UnixMicro() - serverLoopStartUnix
 }
 
-// startTime is when our process started
+// startTime is when our process started (fallback before first sync)
 var startTime = time.Now()
 
-// hackOffset is added to our monotonic time to match server's clock
-// It gets set after the first time sync response
-var hackOffset int64
+// serverLoopStartUnix is when the server's asyncio event loop started, in Unix microseconds
+// Calculated from first time sync: unix_now - server_loop_time
+var serverLoopStartUnix int64

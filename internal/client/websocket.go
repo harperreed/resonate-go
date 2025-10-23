@@ -206,6 +206,8 @@ func (c *Client) handleBinaryMessage(data []byte) {
 	timestamp := int64(binary.BigEndian.Uint64(data[1:9]))
 	audioData := data[9:]
 
+	log.Printf("WebSocket: Received binary chunk, timestamp=%d, size=%d", timestamp, len(audioData))
+
 	chunk := AudioChunk{
 		Timestamp: timestamp,
 		Data:      audioData,
@@ -213,7 +215,9 @@ func (c *Client) handleBinaryMessage(data []byte) {
 
 	select {
 	case c.AudioChunks <- chunk:
+		log.Printf("WebSocket: Chunk sent to channel")
 	case <-c.ctx.Done():
+		log.Printf("WebSocket: Context done, dropping chunk")
 	}
 }
 
