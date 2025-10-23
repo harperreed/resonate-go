@@ -138,7 +138,7 @@ func (p *Player) connect(serverAddr string) error {
 			SupportCodecs:      []string{"opus", "flac", "pcm"},
 			SupportChannels:    []int{1, 2},
 			SupportSampleRates: []int{44100, 48000},
-			SupportBitDepths:   []int{16, 24},
+			SupportBitDepth:    []int{16, 24},
 		},
 	}
 

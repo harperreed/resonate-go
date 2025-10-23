@@ -36,7 +36,7 @@ type PlayerSupport struct {
 	SupportCodecs      []string      `json:"support_codecs,omitempty"`
 	SupportChannels    []int         `json:"support_channels,omitempty"`
 	SupportSampleRates []int         `json:"support_sample_rates,omitempty"`
-	SupportBitDepths   []int         `json:"support_bit_depths,omitempty"`
+	SupportBitDepth    []int         `json:"support_bit_depth,omitempty"`
 }
 
 // AudioFormat describes a supported audio format
