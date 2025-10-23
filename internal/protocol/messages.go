@@ -27,9 +27,13 @@ type DeviceInfo struct {
 
 // PlayerSupport describes player capabilities
 type PlayerSupport struct {
-	SupportFormats     []AudioFormat `json:"support_formats"`
+	// Spec fields (newer)
+	SupportFormats     []AudioFormat `json:"support_formats,omitempty"`
 	BufferCapacity     int           `json:"buffer_capacity,omitempty"`
 	SupportedCommands  []string      `json:"supported_commands,omitempty"`
+
+	// Legacy fields (Music Assistant compatibility)
+	SupportCodecs      []string      `json:"support_codecs,omitempty"`
 }
 
 // AudioFormat describes a supported audio format

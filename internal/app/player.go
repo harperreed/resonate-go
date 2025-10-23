@@ -126,6 +126,7 @@ func (p *Player) connect(serverAddr string) error {
 			SoftwareVersion: version.Version,
 		},
 		PlayerSupport: protocol.PlayerSupport{
+			// New spec format
 			SupportFormats: []protocol.AudioFormat{
 				{Codec: "opus", Channels: 2, SampleRate: 48000, BitDepth: 16},
 				{Codec: "flac", Channels: 2, SampleRate: 48000, BitDepth: 16},
@@ -133,6 +134,8 @@ func (p *Player) connect(serverAddr string) error {
 			},
 			BufferCapacity:    1048576,
 			SupportedCommands: []string{"volume", "mute"},
+			// Legacy format (Music Assistant compatibility)
+			SupportCodecs:     []string{"opus", "flac", "pcm"},
 		},
 	}
 
