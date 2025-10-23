@@ -123,19 +123,19 @@ func (cs *ClockSync) CheckQuality() Quality {
 func (cs *ClockSync) ServerToLocalTime(serverTime int64) time.Time {
 	offset := cs.GetOffset()
 	// offset = (server_time - client_time)
-	// So: client_monotonic_time = server_time - offset
-	localMonotonicMicros := serverTime - offset
+	// So: client_time = server_time - offset
+	localMicros := serverTime - offset
 
-	// Convert from our monotonic microseconds to wall clock time
-	// startTime + duration since start
-	return startTime.Add(time.Duration(localMonotonicMicros) * time.Microsecond)
+	// Convert microseconds to time.Time
+	return time.Unix(0, localMicros*1000)
 }
 
 // CurrentMicros returns current monotonic time in microseconds
 // This uses time.Since with a global start time to match the server's monotonic clock
+// We artificially start from Unix epoch to minimize offset with long-running servers
 func CurrentMicros() int64 {
-	return int64(time.Since(startTime) / time.Microsecond)
+	// Use wall clock microseconds instead of monotonic to match server expectations
+	return time.Now().UnixNano() / 1000
 }
 
-// startTime is the monotonic clock base (initialized at package load)
-var startTime = time.Now()
+// Removed startTime - using Unix epoch instead
