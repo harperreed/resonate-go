@@ -54,10 +54,10 @@ type ServerHello struct {
 	Version  int    `json:"version"`
 }
 
-// ClientState reports the player's current state
+// ClientState reports the player's current state (sent as player/update message)
 type ClientState struct {
-	State  string `json:"state,omitempty"`
-	Volume int    `json:"volume,omitempty"`
+	State  string `json:"state,omitempty"`  // "playing" or "idle"
+	Volume int    `json:"volume,omitempty"` // 0-100
 	Muted  bool   `json:"muted,omitempty"`
 }
 
@@ -87,12 +87,12 @@ type StreamMetadata struct {
 
 // ClientTime is sent for clock synchronization
 type ClientTime struct {
-	T1 int64 `json:"t1"` // Client timestamp in microseconds
+	ClientTransmitted int64 `json:"client_transmitted"` // Client timestamp in microseconds
 }
 
 // ServerTime is the response to client/time
 type ServerTime struct {
-	T1 int64 `json:"t1"` // Echoed client timestamp
-	T2 int64 `json:"t2"` // Server receive timestamp
-	T3 int64 `json:"t3"` // Server send timestamp
+	ClientTransmitted  int64 `json:"client_transmitted"`  // Echoed client timestamp
+	ServerReceived     int64 `json:"server_received"`     // Server receive timestamp
+	ServerTransmitted  int64 `json:"server_transmitted"`  // Server send timestamp
 }

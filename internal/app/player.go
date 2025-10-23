@@ -175,7 +175,7 @@ func (p *Player) clockSyncLoop() {
 			select {
 			case resp := <-p.client.TimeSyncResp:
 				t4 := sync.CurrentMicros()
-				p.clockSync.ProcessSyncResponse(resp.T1, resp.T2, resp.T3, t4)
+				p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
 
 			case <-time.After(2 * time.Second):
 				log.Printf("Time sync timeout")

@@ -136,13 +136,13 @@ func (c *Client) handshake() error {
 
 	// Send initial state
 	state := protocol.ClientState{
-		State:  "synchronized",
+		State:  "idle",
 		Volume: 100,
 		Muted:  false,
 	}
 
 	stateMsg := protocol.Message{
-		Type:    "client/state",
+		Type:    "player/update",
 		Payload: state,
 	}
 
@@ -265,10 +265,10 @@ func (c *Client) handleJSONMessage(data []byte) {
 	}
 }
 
-// SendState sends a client/state message
+// SendState sends a player/update message
 func (c *Client) SendState(state protocol.ClientState) error {
 	msg := protocol.Message{
-		Type:    "client/state",
+		Type:    "player/update",
 		Payload: state,
 	}
 	return c.sendJSON(msg)
@@ -279,7 +279,7 @@ func (c *Client) SendTimeSync(t1 int64) error {
 	msg := protocol.Message{
 		Type: "client/time",
 		Payload: protocol.ClientTime{
-			T1: t1,
+			ClientTransmitted: t1,
 		},
 	}
 	return c.sendJSON(msg)
