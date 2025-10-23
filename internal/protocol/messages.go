@@ -56,9 +56,9 @@ type ServerHello struct {
 
 // ClientState reports the player's current state (sent as player/update message)
 type ClientState struct {
-	State  string `json:"state,omitempty"`  // "playing" or "idle"
-	Volume int    `json:"volume,omitempty"` // 0-100
-	Muted  bool   `json:"muted,omitempty"`
+	State  string `json:"state"`  // "playing" or "idle"
+	Volume int    `json:"volume"` // 0-100
+	Muted  bool   `json:"muted"`  // All fields are required
 }
 
 // ServerCommand is a control message from the server
