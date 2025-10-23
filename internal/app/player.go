@@ -273,10 +273,18 @@ func (p *Player) handleStreamStart() {
 
 // handleAudioChunks decodes and schedules audio
 func (p *Player) handleAudioChunks() {
+	chunkCount := 0
 	for {
 		select {
 		case chunk := <-p.client.AudioChunks:
+			chunkCount++
+			if chunkCount <= 3 {
+				log.Printf("Received audio chunk #%d: timestamp=%d, size=%d bytes",
+					chunkCount, chunk.Timestamp, len(chunk.Data))
+			}
+
 			if p.decoder == nil || p.scheduler == nil {
+				log.Printf("Skipping chunk: decoder=%v, scheduler=%v", p.decoder != nil, p.scheduler != nil)
 				continue
 			}
 
