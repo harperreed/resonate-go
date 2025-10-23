@@ -202,18 +202,24 @@ func (p *Player) clockSyncLoop() {
 	for {
 		select {
 		case <-ticker.C:
+			// Drain any stale responses before sending new request
+			for {
+				select {
+				case <-p.client.TimeSyncResp:
+					log.Printf("Discarded stale time sync response")
+				default:
+					goto sendRequest
+				}
+			}
+
+		sendRequest:
 			t1 := sync.CurrentMicros()
 			p.client.SendTimeSync(t1)
 
-			// Wait for response
-			select {
-			case resp := <-p.client.TimeSyncResp:
-				t4 := sync.CurrentMicros()
-				p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
-
-			case <-time.After(2 * time.Second):
-				log.Printf("Time sync timeout")
-			}
+		case resp := <-p.client.TimeSyncResp:
+			// Process response asynchronously when it arrives
+			t4 := sync.CurrentMicros()
+			p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
 
 		case <-p.ctx.Done():
 			return
