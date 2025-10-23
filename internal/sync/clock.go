@@ -48,6 +48,13 @@ func (cs *ClockSync) ProcessSyncResponse(t1, t2, t3, t4 int64) {
 	cs.rawOffset = offset
 	cs.lastSync = time.Now()
 
+	// Debug: Log raw timestamp values for first few syncs
+	if cs.sampleCount < 3 {
+		log.Printf("Raw sync timestamps: t1(client_sent)=%d, t2(server_recv)=%d, t3(server_sent)=%d, t4(client_recv)=%d",
+			t1, t2, t3, t4)
+		log.Printf("Calculated: rtt=%dμs, raw_offset=%dμs", rtt, offset)
+	}
+
 	// Discard samples with high RTT (network congestion)
 	if rtt > 100000 { // 100ms
 		log.Printf("Discarding sync sample: high RTT %dμs", rtt)
