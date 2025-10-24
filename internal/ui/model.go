@@ -256,7 +256,8 @@ func (m *Model) applyStatus(msg StatusMsg) {
 	if msg.ServerName != "" {
 		m.serverName = msg.ServerName
 	}
-	if msg.SyncOffset != 0 {
+	// Sync stats are always applied when sent (offset can be 0 for perfect sync)
+	if msg.SyncOffset != 0 || msg.SyncRTT != 0 {
 		m.syncOffset = msg.SyncOffset
 		m.syncRTT = msg.SyncRTT
 		m.syncQuality = msg.SyncQuality
@@ -272,19 +273,19 @@ func (m *Model) applyStatus(msg StatusMsg) {
 		m.artist = msg.Artist
 		m.album = msg.Album
 	}
+	// Volume is always applied when explicitly sent (can be 0 for silent)
+	// We rely on caller not sending Volume=0 in messages unless it's intentional
 	if msg.Volume != 0 {
 		m.volume = msg.Volume
 	}
-	if msg.Received != 0 {
-		m.received = msg.Received
-		m.played = msg.Played
-		m.dropped = msg.Dropped
-	}
-	if msg.Goroutines != 0 {
-		m.goroutines = msg.Goroutines
-		m.memAlloc = msg.MemAlloc
-		m.memSys = msg.MemSys
-	}
+	// Always apply stats - they can legitimately be zero
+	m.received = msg.Received
+	m.played = msg.Played
+	m.dropped = msg.Dropped
+	m.bufferDepth = msg.BufferDepth
+	m.goroutines = msg.Goroutines
+	m.memAlloc = msg.MemAlloc
+	m.memSys = msg.MemSys
 }
 
 // StatusMsg updates TUI state

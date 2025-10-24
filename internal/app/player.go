@@ -448,18 +448,29 @@ func (p *Player) statsUpdateLoop() {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
+	// Use a slower ticker for expensive runtime stats to avoid GC pauses
+	runtimeStatsTicker := time.NewTicker(2 * time.Second)
+	defer runtimeStatsTicker.Stop()
+
+	var lastGoroutines int
+	var lastMemAlloc, lastMemSys uint64
+
 	for {
 		select {
-		case <-ticker.C:
-			// Collect runtime stats
+		case <-runtimeStatsTicker.C:
+			// Collect runtime stats less frequently (every 2 seconds)
+			// to avoid GC pauses from ReadMemStats
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
-			numGoroutines := runtime.NumGoroutine()
+			lastGoroutines = runtime.NumGoroutine()
+			lastMemAlloc = m.Alloc
+			lastMemSys = m.Sys
 
+		case <-ticker.C:
 			msg := ui.StatusMsg{
-				Goroutines: numGoroutines,
-				MemAlloc:   m.Alloc,
-				MemSys:     m.Sys,
+				Goroutines: lastGoroutines,
+				MemAlloc:   lastMemAlloc,
+				MemSys:     lastMemSys,
 			}
 
 			// Add scheduler stats if available
