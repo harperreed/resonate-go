@@ -190,8 +190,8 @@ func (cs *ClockSync) ServerToLocalTime(serverTime int64) time.Time {
 	denominator := 1.0 + cs.drift
 	clientMicros := int64(numerator / denominator)
 
-	// Convert microseconds to time.Time
-	return time.Unix(0, clientMicros*1000)
+	// Convert monotonic microseconds to time.Time by adding to process start time
+	return startTime.Add(time.Duration(clientMicros) * time.Microsecond)
 }
 
 // CurrentMicros returns current time in server's reference frame
@@ -226,11 +226,14 @@ func SetGlobalClockSync(cs *ClockSync) {
 	globalClockSync = cs
 }
 
-// ClientMicros returns raw client Unix epoch time in microseconds
+// ClientMicros returns raw client monotonic time in microseconds
 // This is ONLY for use in time synchronization - use CurrentMicros() for timestamps
 func ClientMicros() int64 {
-	return time.Now().UnixMicro()
+	return int64(time.Since(startTime) / time.Microsecond)
 }
+
+// startTime is when our process started
+var startTime = time.Now()
 
 // globalClockSync is the global clock synchronization instance
 var globalClockSync *ClockSync
