@@ -5,8 +5,8 @@ package server
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"log"
-	"math"
 	"sync"
 	"time"
 
@@ -21,8 +21,6 @@ const (
 
 	// Chunk timing
 	ChunkDurationMs = 20 // 20ms chunks
-	ChunkSamples    = (DefaultSampleRate * ChunkDurationMs) / 1000
-	ChunkSize       = ChunkSamples * DefaultChannels * (DefaultBitDepth / 8)
 
 	// Buffering
 	BufferAheadMs = 500 // Send audio 500ms ahead
@@ -36,22 +34,27 @@ type AudioEngine struct {
 	clients   map[string]*Client
 	clientsMu sync.RWMutex
 
-	// Audio generation
-	sampleIndex uint64
-	frequency   float64 // Test tone frequency
+	// Audio source (file or test tone)
+	source AudioSource
 
 	stopChan chan struct{}
 	stopOnce sync.Once // Ensure Stop() is only called once
 }
 
 // NewAudioEngine creates a new audio engine
-func NewAudioEngine(server *Server) *AudioEngine {
-	return &AudioEngine{
-		server:    server,
-		clients:   make(map[string]*Client),
-		frequency: 440.0, // A4 note
-		stopChan:  make(chan struct{}),
+func NewAudioEngine(server *Server) (*AudioEngine, error) {
+	// Create audio source
+	source, err := NewAudioSource(server.config.AudioFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create audio source: %w", err)
 	}
+
+	return &AudioEngine{
+		server:   server,
+		clients:  make(map[string]*Client),
+		source:   source,
+		stopChan: make(chan struct{}),
+	}, nil
 }
 
 // Start starts the audio engine
@@ -76,23 +79,59 @@ func (e *AudioEngine) Start() {
 func (e *AudioEngine) Stop() {
 	e.stopOnce.Do(func() {
 		close(e.stopChan)
+		if e.source != nil {
+			if err := e.source.Close(); err != nil {
+				log.Printf("Error closing audio source: %v", err)
+			}
+		}
 	})
 }
 
 // AddClient adds a client to receive audio
 func (e *AudioEngine) AddClient(client *Client) {
 	e.clientsMu.Lock()
-	e.clients[client.ID] = client
-	e.clientsMu.Unlock()
+	defer e.clientsMu.Unlock()
 
-	log.Printf("Audio engine: added client %s", client.Name)
+	// Negotiate codec based on client capabilities
+	codec := e.negotiateCodec(client)
+
+	// Create encoder if needed
+	var opusEncoder *OpusEncoder
+	chunkSamples := (e.source.SampleRate() * ChunkDurationMs) / 1000
+
+	switch codec {
+	case "opus":
+		encoder, err := NewOpusEncoder(e.source.SampleRate(), e.source.Channels(), chunkSamples)
+		if err != nil {
+			log.Printf("Failed to create Opus encoder for %s, falling back to PCM: %v", client.Name, err)
+			codec = "pcm"
+		} else {
+			opusEncoder = encoder
+		}
+	case "flac":
+		// FLAC is a file format, not a streaming codec
+		// It requires headers at the start and can't be split into independent chunks
+		// Fall back to PCM for lossless streaming
+		log.Printf("FLAC streaming not supported for %s, using PCM for lossless audio", client.Name)
+		codec = "pcm"
+	}
+
+	// Set codec and encoder atomically with client lock
+	client.mu.Lock()
+	client.Codec = codec
+	client.OpusEncoder = opusEncoder
+	client.mu.Unlock()
+
+	e.clients[client.ID] = client
+
+	log.Printf("Audio engine: added client %s with codec %s", client.Name, codec)
 
 	// Send stream/start message (use select to avoid blocking)
 	streamStart := protocol.StreamStart{
 		Player: &protocol.StreamStartPlayer{
-			Codec:      "pcm",
-			SampleRate: DefaultSampleRate,
-			Channels:   DefaultChannels,
+			Codec:      codec,
+			SampleRate: e.source.SampleRate(),
+			Channels:   e.source.Channels(),
 			BitDepth:   DefaultBitDepth,
 		},
 	}
@@ -109,10 +148,11 @@ func (e *AudioEngine) AddClient(client *Client) {
 	}
 
 	// Send metadata (use select to avoid blocking)
+	title, artist, album := e.source.Metadata()
 	metadata := protocol.StreamMetadata{
-		Title:  "Test Tone",
-		Artist: "Resonate Server",
-		Album:  "Reference Implementation",
+		Title:  title,
+		Artist: artist,
+		Album:  album,
 	}
 
 	metaMsg := protocol.Message{
@@ -132,8 +172,48 @@ func (e *AudioEngine) RemoveClient(client *Client) {
 	e.clientsMu.Lock()
 	defer e.clientsMu.Unlock()
 
+	// Clean up encoder if it exists (read with lock)
+	client.mu.RLock()
+	opusEncoder := client.OpusEncoder
+	client.mu.RUnlock()
+
+	if opusEncoder != nil {
+		opusEncoder.Close()
+	}
+
 	delete(e.clients, client.ID)
 	log.Printf("Audio engine: removed client %s", client.Name)
+}
+
+// negotiateCodec selects the best codec based on client capabilities
+func (e *AudioEngine) negotiateCodec(client *Client) string {
+	// If client has no capabilities, default to PCM
+	if client.Capabilities == nil {
+		return "pcm"
+	}
+
+	// Check legacy support_codecs array (Music Assistant compatibility)
+	for _, codec := range client.Capabilities.SupportCodecs {
+		if codec == "opus" {
+			return "opus"
+		}
+		if codec == "flac" {
+			return "flac"
+		}
+	}
+
+	// Check newer support_formats array (spec-compliant)
+	for _, format := range client.Capabilities.SupportFormats {
+		if format.Codec == "opus" {
+			return "opus"
+		}
+		if format.Codec == "flac" {
+			return "flac"
+		}
+	}
+
+	// Default to PCM if no compressed codec supported
+	return "pcm"
 }
 
 // generateAndSendChunk generates a chunk of audio and sends it to all clients
@@ -142,40 +222,61 @@ func (e *AudioEngine) generateAndSendChunk() {
 	currentTime := e.server.getClockMicros()
 	playbackTime := currentTime + (BufferAheadMs * 1000)
 
-	if e.server.config.Debug && e.sampleIndex%100 == 0 {
-		log.Printf("[DEBUG] Generating chunk: server_time=%d, playback_time=%d, sample_index=%d",
-			currentTime, playbackTime, e.sampleIndex)
+	// Calculate chunk size based on source sample rate
+	chunkSamples := (e.source.SampleRate() * ChunkDurationMs) / 1000
+	totalSamples := chunkSamples * e.source.Channels()
+
+	// Read audio samples from source
+	samples := make([]int16, totalSamples)
+	n, err := e.source.Read(samples)
+	if err != nil {
+		log.Printf("Error reading audio source: %v", err)
+		return
 	}
 
-	// Generate audio samples (sine wave)
-	samples := make([]int16, ChunkSamples*DefaultChannels)
-
-	for i := 0; i < ChunkSamples; i++ {
-		// Generate sine wave
-		t := float64(e.sampleIndex+uint64(i)) / float64(DefaultSampleRate)
-		sample := math.Sin(2 * math.Pi * e.frequency * t)
-
-		// Convert to 16-bit PCM
-		pcmValue := int16(sample * 32767.0 * 0.5) // 50% volume
-
-		// Stereo (duplicate to both channels)
-		samples[i*DefaultChannels] = pcmValue
-		samples[i*DefaultChannels+1] = pcmValue
+	if e.server.config.Debug && n > 0 {
+		log.Printf("[DEBUG] Generating chunk: server_time=%d, playback_time=%d, samples_read=%d",
+			currentTime, playbackTime, n)
 	}
 
-	e.sampleIndex += ChunkSamples
-
-	// Encode as WAV chunk (just the raw PCM data for now)
-	audioData := encodePCM(samples)
-
-	// Create binary message
-	chunk := CreateAudioChunk(playbackTime, audioData)
-
-	// Send to all clients
+	// Send to all clients (encode per-client based on codec)
 	e.clientsMu.RLock()
 	defer e.clientsMu.RUnlock()
 
 	for _, client := range e.clients {
+		var audioData []byte
+		var encodeErr error
+
+		// Read codec and encoder atomically
+		client.mu.RLock()
+		codec := client.Codec
+		opusEncoder := client.OpusEncoder
+		client.mu.RUnlock()
+
+		// Encode based on client's negotiated codec
+		switch codec {
+		case "opus":
+			if opusEncoder != nil {
+				audioData, encodeErr = opusEncoder.Encode(samples[:n])
+				if encodeErr != nil {
+					log.Printf("Opus encode error for %s: %v", client.Name, encodeErr)
+					continue
+				}
+			} else {
+				log.Printf("Warning: Client %s has opus codec but no encoder", client.Name)
+				continue
+			}
+		case "pcm":
+			audioData = encodePCM(samples[:n])
+		default:
+			// Unknown codec, fall back to PCM
+			log.Printf("Warning: Unknown codec %s for client %s, using PCM", codec, client.Name)
+			audioData = encodePCM(samples[:n])
+		}
+
+		// Create binary message
+		chunk := CreateAudioChunk(playbackTime, audioData)
+
 		if err := e.server.sendBinary(client, chunk); err != nil {
 			log.Printf("Error sending audio to %s: %v", client.Name, err)
 		}

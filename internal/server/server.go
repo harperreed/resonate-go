@@ -32,6 +32,7 @@ type Config struct {
 	Name       string
 	EnableMDNS bool
 	Debug      bool
+	AudioFile  string // Path to audio file to stream (MP3, FLAC, WAV). Empty = test tone
 }
 
 // Server represents the Resonate server
@@ -80,6 +81,10 @@ type Client struct {
 	Volume       int
 	Muted        bool
 
+	// Negotiated codec for this client
+	Codec        string // "pcm" or "opus" (flac falls back to pcm)
+	OpusEncoder  *OpusEncoder // Opus encoder (if using opus codec)
+
 	// Output channel for messages
 	sendChan     chan interface{}
 
@@ -110,7 +115,11 @@ func (s *Server) Start() error {
 	log.Printf("Server starting: %s (ID: %s)", s.config.Name, s.serverID)
 
 	// Create audio engine
-	s.audioEngine = NewAudioEngine(s)
+	audioEngine, err := NewAudioEngine(s)
+	if err != nil {
+		return fmt.Errorf("failed to create audio engine: %w", err)
+	}
+	s.audioEngine = audioEngine
 
 	// Start mDNS advertisement if enabled
 	if s.config.EnableMDNS {
@@ -259,7 +268,25 @@ func (s *Server) handleConnection(conn *websocket.Conn) {
 		return
 	}
 
+	// Validate client hello
+	if hello.ClientID == "" {
+		log.Printf("Client hello missing ClientID")
+		return
+	}
+	if hello.Name == "" {
+		log.Printf("Client hello missing Name")
+		return
+	}
+
 	log.Printf("Client hello: %s (ID: %s, Roles: %v)", hello.Name, hello.ClientID, hello.SupportedRoles)
+
+	// Check for duplicate client ID before creating client
+	s.clientsMu.Lock()
+	if existingClient, exists := s.clients[hello.ClientID]; exists {
+		s.clientsMu.Unlock()
+		log.Printf("Client ID %s already connected (name: %s), rejecting duplicate", hello.ClientID, existingClient.Name)
+		return
+	}
 
 	// Create client
 	client := &Client{
@@ -274,8 +301,7 @@ func (s *Server) handleConnection(conn *websocket.Conn) {
 		sendChan:     make(chan interface{}, 100),
 	}
 
-	// Register client
-	s.clientsMu.Lock()
+	// Register client (already holding lock)
 	s.clients[client.ID] = client
 	s.clientsMu.Unlock()
 
@@ -331,6 +357,8 @@ func (s *Server) clientWriter(client *Client) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	const writeDeadline = 10 * time.Second
+
 	for {
 		select {
 		case msg, ok := <-client.sendChan:
@@ -342,6 +370,7 @@ func (s *Server) clientWriter(client *Client) {
 			switch v := msg.(type) {
 			case []byte:
 				// Binary message
+				client.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
 				if err := client.Conn.WriteMessage(websocket.BinaryMessage, v); err != nil {
 					log.Printf("Error writing binary message: %v", err)
 					return
@@ -353,6 +382,7 @@ func (s *Server) clientWriter(client *Client) {
 					log.Printf("Error marshaling message: %v", err)
 					continue
 				}
+				client.Conn.SetWriteDeadline(time.Now().Add(writeDeadline))
 				if err := client.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
 					log.Printf("Error writing text message: %v", err)
 					return

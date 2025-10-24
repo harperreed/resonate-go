@@ -15,11 +15,12 @@ import (
 )
 
 var (
-	port     = flag.Int("port", 8927, "WebSocket server port")
-	name     = flag.String("name", "", "Server friendly name (default: hostname-resonate-server)")
-	logFile  = flag.String("log-file", "resonate-server.log", "Log file path")
-	debug    = flag.Bool("debug", false, "Enable debug logging")
-	noMDNS   = flag.Bool("no-mdns", false, "Disable mDNS advertisement")
+	port      = flag.Int("port", 8927, "WebSocket server port")
+	name      = flag.String("name", "", "Server friendly name (default: hostname-resonate-server)")
+	logFile   = flag.String("log-file", "resonate-server.log", "Log file path")
+	debug     = flag.Bool("debug", false, "Enable debug logging")
+	noMDNS    = flag.Bool("no-mdns", false, "Disable mDNS advertisement")
+	audioFile = flag.String("audio", "", "Audio file to stream (MP3, FLAC, WAV). If not specified, plays test tone")
 )
 
 func main() {
@@ -59,6 +60,7 @@ func main() {
 		Name:       serverName,
 		EnableMDNS: !*noMDNS,
 		Debug:      *debug,
+		AudioFile:  *audioFile,
 	}
 
 	srv := server.New(config)
