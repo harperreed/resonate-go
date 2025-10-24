@@ -182,23 +182,33 @@ func (c *Client) readMessages() {
 			return
 		}
 
+		log.Printf("ReadMessage: type=%d, len=%d bytes", messageType, len(data))
+
 		if messageType == websocket.BinaryMessage {
+			log.Printf("Routing to handleBinaryMessage")
 			c.handleBinaryMessage(data)
 		} else if messageType == websocket.TextMessage {
+			log.Printf("Routing to handleJSONMessage")
 			c.handleJSONMessage(data)
+		} else {
+			log.Printf("Unknown WebSocket message type: %d", messageType)
 		}
 	}
 }
 
 // handleBinaryMessage handles audio chunks
 func (c *Client) handleBinaryMessage(data []byte) {
+	log.Printf("handleBinaryMessage called: len=%d bytes", len(data))
+
 	if len(data) < 9 {
 		log.Printf("Invalid binary message: too short")
 		return
 	}
 
 	msgType := data[0]
-	if msgType != 0 {
+	log.Printf("Binary message type byte: %d", msgType)
+
+	if msgType != 1 {
 		log.Printf("Unknown binary message type: %d", msgType)
 		return
 	}

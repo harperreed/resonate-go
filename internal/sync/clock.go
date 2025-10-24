@@ -1,5 +1,5 @@
-// ABOUTME: Clock synchronization using NTP-style algorithm
-// ABOUTME: Maintains offset between client and server clocks
+// ABOUTME: Clock synchronization with drift compensation
+// ABOUTME: Tracks both offset AND drift to handle clock frequency differences
 package sync
 
 import (
@@ -8,16 +8,18 @@ import (
 	"time"
 )
 
-// ClockSync manages clock synchronization with the server
+// ClockSync manages clock synchronization with drift compensation
 type ClockSync struct {
-	mu            sync.RWMutex
-	offset        int64 // Smoothed offset in microseconds
-	rawOffset     int64 // Latest raw offset
-	rtt           int64 // Latest round-trip time
-	quality       Quality
-	lastSync      time.Time
-	sampleCount   int
-	smoothingRate float64
+	mu              sync.RWMutex
+	offset          int64     // Current offset in microseconds (server - client)
+	drift           float64   // Clock drift rate (dimensionless: μs/μs)
+	rawOffset       int64     // Latest raw offset measurement
+	rtt             int64     // Latest round-trip time
+	quality         Quality
+	lastSync        time.Time
+	lastSyncMicros  int64     // Client time (μs) when offset/drift were last updated
+	sampleCount     int
+	smoothingRate   float64
 }
 
 // Quality represents sync quality
@@ -34,52 +36,26 @@ func NewClockSync() *ClockSync {
 	return &ClockSync{
 		smoothingRate: 0.1, // 10% weight to new samples
 		quality:       QualityLost,
+		drift:         0.0, // Start assuming no drift
 	}
 }
 
-// ProcessSyncResponse processes a server/time response
+// ProcessSyncResponse processes a server/time response with drift compensation
 func (cs *ClockSync) ProcessSyncResponse(t1, t2, t3, t4 int64) {
-	rtt, offset := calculateOffset(t1, t2, t3, t4)
+	rtt, measuredOffset := calculateOffset(t1, t2, t3, t4)
 
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
 	cs.rtt = rtt
-	cs.rawOffset = offset
+	cs.rawOffset = measuredOffset
 	cs.lastSync = time.Now()
 
 	// Debug: Log raw timestamp values for first few syncs
 	if cs.sampleCount < 3 {
-		log.Printf("Raw sync timestamps: t1(client_sent)=%d, t2(server_recv)=%d, t3(server_sent)=%d, t4(client_recv)=%d",
+		log.Printf("Raw sync timestamps: t1=%d, t2=%d, t3=%d, t4=%d",
 			t1, t2, t3, t4)
-		log.Printf("Calculated: rtt=%dμs, raw_offset=%dμs", rtt, offset)
-	}
-
-	// HACK: On first sync, calculate when server's event loop started in Unix time
-	// This lets us match the server's loop.time() exactly
-	if cs.sampleCount == 0 && serverLoopStartUnix == 0 {
-		// t2 is server's loop.time() in microseconds when it received our request
-		// On first sync, t4 is our monotonic time, so we need to get actual Unix time
-		nowUnix := time.Now().UnixMicro()
-
-		// Account for half RTT: when server sent its response (t3), the Unix time was approx now - rtt/2
-		// But we want Unix time at t2 (when server received our request)
-		// Time from t2 to t3 is (t3 - t2), so work backwards from now
-		unixAtT3 := nowUnix - (rtt / 2)  // Unix time when server sent response
-		unixAtT2 := unixAtT3 - (t3 - t2) // Unix time when server received request
-		serverLoopStartUnix = unixAtT2 - t2
-
-		log.Printf("HACK: Calculated server loop start at Unix time %d", serverLoopStartUnix)
-		log.Printf("HACK: t2=%dμs (server_recv), t3=%dμs (server_sent), rtt=%dμs",
-			t2, t3, rtt)
-		log.Printf("HACK: unix_now=%dμs, unix_at_t3=%dμs, unix_at_t2=%dμs",
-			nowUnix, unixAtT3, unixAtT2)
-
-		// Set our stored offset to zero since we're now perfectly synchronized
-		cs.offset = 0
-		cs.sampleCount++
-		cs.quality = QualityGood
-		return
+		log.Printf("Calculated: rtt=%dμs, measured_offset=%dμs", rtt, measuredOffset)
 	}
 
 	// Discard samples with high RTT (network congestion)
@@ -88,15 +64,61 @@ func (cs *ClockSync) ProcessSyncResponse(t1, t2, t3, t4 int64) {
 		return
 	}
 
-	// After the hack is applied, the offset should be near zero
-	// Apply exponential smoothing for fine-tuning
+	// First sync: initialize offset, no drift yet
 	if cs.sampleCount == 0 {
-		cs.offset = offset
-	} else {
-		cs.offset = int64(float64(cs.offset)*(1-cs.smoothingRate) +
-			float64(offset)*cs.smoothingRate)
+		cs.offset = measuredOffset
+		cs.lastSyncMicros = t4 // Remember client time at this measurement
+		cs.sampleCount++
+		cs.quality = QualityGood
+		log.Printf("Initial sync: offset=%dμs, rtt=%dμs", cs.offset, rtt)
+		return
 	}
 
+	// Second sync: calculate initial drift
+	if cs.sampleCount == 1 {
+		dt := float64(t4 - cs.lastSyncMicros) // Time elapsed in client microseconds
+		if dt > 0 {
+			// Drift = change in offset over time
+			cs.drift = float64(measuredOffset-cs.offset) / dt
+			log.Printf("Drift initialized: drift=%.9f μs/μs over Δt=%.0fμs", cs.drift, dt)
+		}
+		cs.offset = measuredOffset
+		cs.lastSyncMicros = t4
+		cs.sampleCount++
+		cs.quality = QualityGood
+		log.Printf("Second sync: offset=%dμs, drift=%.9f, rtt=%dμs", cs.offset, cs.drift, rtt)
+		return
+	}
+
+	// Subsequent syncs: predict offset using drift, then update both
+	dt := float64(t4 - cs.lastSyncMicros)
+	if dt <= 0 {
+		log.Printf("Discarding sync sample: non-monotonic time")
+		return
+	}
+
+	// Predict what offset should be based on drift
+	predictedOffset := cs.offset + int64(cs.drift*dt)
+
+	// Residual = how much our prediction was off
+	residual := measuredOffset - predictedOffset
+
+	// Reject outliers (residual > 50ms suggests network issue or clock jump)
+	if residual > 50000 || residual < -50000 {
+		log.Printf("Discarding sync sample: large residual %dμs (possible clock jump)", residual)
+		return
+	}
+
+	// Update offset from PREDICTED offset plus gain * residual
+	// This is the Kalman filter update formula (simplified with fixed gain)
+	cs.offset = predictedOffset + int64(cs.smoothingRate*float64(residual))
+
+	// Update drift: drift correction is residual / dt
+	// This estimates how much the drift rate needs to change
+	driftCorrection := float64(residual) / dt
+	cs.drift = cs.drift + cs.smoothingRate*driftCorrection
+
+	cs.lastSyncMicros = t4
 	cs.sampleCount++
 
 	// Update quality
@@ -106,8 +128,10 @@ func (cs *ClockSync) ProcessSyncResponse(t1, t2, t3, t4 int64) {
 		cs.quality = QualityDegraded
 	}
 
-	log.Printf("Clock sync: offset=%dμs, rtt=%dμs, quality=%v",
-		cs.offset, cs.rtt, cs.quality)
+	if cs.sampleCount < 10 {
+		log.Printf("Sync #%d: offset=%dμs, drift=%.9f, residual=%dμs, rtt=%dμs",
+			cs.sampleCount, cs.offset, cs.drift, residual, rtt)
+	}
 }
 
 // calculateOffset computes RTT and clock offset
@@ -115,13 +139,13 @@ func calculateOffset(t1, t2, t3, t4 int64) (rtt, offset int64) {
 	// Round-trip time
 	rtt = (t4 - t1) - (t3 - t2)
 
-	// Estimated offset (positive = server ahead)
+	// Estimated offset (positive = server ahead of client)
 	offset = ((t2 - t1) + (t3 - t4)) / 2
 
 	return
 }
 
-// GetOffset returns the smoothed clock offset
+// GetOffset returns the current offset
 func (cs *ClockSync) GetOffset() int64 {
 	cs.mu.RLock()
 	defer cs.mu.RUnlock()
@@ -149,31 +173,64 @@ func (cs *ClockSync) CheckQuality() Quality {
 
 // ServerToLocalTime converts server timestamp to local wall clock time
 func (cs *ClockSync) ServerToLocalTime(serverTime int64) time.Time {
-	offset := cs.GetOffset()
-	// offset = (server_time - client_time)
-	// So: client_time = server_time - offset
-	localMicros := serverTime - offset
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
 
-	// Convert microseconds to time.Time
-	return time.Unix(0, localMicros*1000)
-}
-
-// CurrentMicros returns time in microseconds that matches server's loop.time()
-// HACK: The server uses loop.time() (monotonic) for everything and doesn't account
-// for client clock offset. We match it by using Unix time minus when server started.
-func CurrentMicros() int64 {
-	if serverLoopStartUnix == 0 {
-		// Before first sync, use our monotonic time as fallback
-		return int64(time.Since(startTime) / time.Microsecond)
+	// If we haven't synced yet, assume server time = client time
+	if cs.sampleCount == 0 {
+		return time.Unix(0, serverTime*1000)
 	}
 
-	// Return time that matches server's loop.time() in microseconds
-	return time.Now().UnixMicro() - serverLoopStartUnix
+	// Inverse of the forward transform:
+	// server_time = client_time + offset + drift * (client_time - last_sync)
+	// Rearranging: server_time = client_time * (1 + drift) + offset - drift * last_sync
+	// Solving: client_time = (server_time - offset + drift * last_sync) / (1 + drift)
+
+	numerator := float64(serverTime) - float64(cs.offset) + cs.drift*float64(cs.lastSyncMicros)
+	denominator := 1.0 + cs.drift
+	clientMicros := int64(numerator / denominator)
+
+	// Convert microseconds to time.Time
+	return time.Unix(0, clientMicros*1000)
 }
 
-// startTime is when our process started (fallback before first sync)
-var startTime = time.Now()
+// CurrentMicros returns current time in server's reference frame
+// This accounts for both offset AND drift over time
+func CurrentMicros() int64 {
+	cs := globalClockSync
+	if cs == nil {
+		// Before sync initialized, use raw client time
+		return ClientMicros()
+	}
 
-// serverLoopStartUnix is when the server's asyncio event loop started, in Unix microseconds
-// Calculated from first time sync: unix_now - server_loop_time
-var serverLoopStartUnix int64
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+
+	// Get current raw client time
+	clientNow := ClientMicros()
+
+	// If we haven't synced yet, return client time
+	if cs.sampleCount == 0 {
+		return clientNow
+	}
+
+	// Apply offset and drift: server_time = client_time + offset + drift * (client_time - last_sync)
+	dt := clientNow - cs.lastSyncMicros
+	serverTime := clientNow + cs.offset + int64(cs.drift*float64(dt))
+
+	return serverTime
+}
+
+// SetGlobalClockSync sets the global clock sync instance
+func SetGlobalClockSync(cs *ClockSync) {
+	globalClockSync = cs
+}
+
+// ClientMicros returns raw client Unix epoch time in microseconds
+// This is ONLY for use in time synchronization - use CurrentMicros() for timestamps
+func ClientMicros() int64 {
+	return time.Now().UnixMicro()
+}
+
+// globalClockSync is the global clock synchronization instance
+var globalClockSync *ClockSync

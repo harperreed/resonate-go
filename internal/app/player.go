@@ -43,9 +43,12 @@ type Player struct {
 func New(config Config) *Player {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	clockSync := sync.NewClockSync()
+	sync.SetGlobalClockSync(clockSync) // Make it globally accessible for CurrentMicros()
+
 	return &Player{
 		config:    config,
-		clockSync: sync.NewClockSync(),
+		clockSync: clockSync,
 		output:    player.NewOutput(),
 		ctx:       ctx,
 		cancel:    cancel,
@@ -169,13 +172,13 @@ func (p *Player) performInitialSync() error {
 
 	// Do 5 quick sync rounds to establish offset
 	for i := 0; i < 5; i++ {
-		t1 := sync.CurrentMicros()
+		t1 := sync.ClientMicros() // Use raw client time for sync
 		p.client.SendTimeSync(t1)
 
 		// Wait for response with timeout
 		select {
 		case resp := <-p.client.TimeSyncResp:
-			t4 := sync.CurrentMicros()
+			t4 := sync.ClientMicros() // Use raw client time for sync
 			p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
 
 		case <-time.After(500 * time.Millisecond):
@@ -211,12 +214,12 @@ func (p *Player) clockSyncLoop() {
 			}
 
 		sendRequest:
-			t1 := sync.CurrentMicros()
+			t1 := sync.ClientMicros() // Use raw client time for sync
 			p.client.SendTimeSync(t1)
 
 		case resp := <-p.client.TimeSyncResp:
 			// Process response asynchronously when it arrives
-			t4 := sync.CurrentMicros()
+			t4 := sync.ClientMicros() // Use raw client time for sync
 			p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
 
 		case <-p.ctx.Done():
