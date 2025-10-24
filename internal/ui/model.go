@@ -44,10 +44,16 @@ type Model struct {
 
 	// Debug
 	showDebug    bool
+	goroutines   int
+	memAlloc     uint64
+	memSys       uint64
 
 	// Dimensions
 	width        int
 	height       int
+
+	// Volume control channel
+	volumeCtrl   *VolumeControl
 }
 
 // Init initializes the model
@@ -172,23 +178,42 @@ func (m Model) renderHelp() string {
 
 // renderDebug renders debug information
 func (m Model) renderDebug() string {
+	memAllocMB := float64(m.memAlloc) / 1024 / 1024
+	memSysMB := float64(m.memSys) / 1024 / 1024
+
 	return fmt.Sprintf(`│ DEBUG:                                               │
-│   Goroutines: (not tracked)                         │
-│   Channels: (not tracked)                           │
-│   Clock Offset: %+dμs                              │
-`, m.syncOffset)
+│   Goroutines: %-38d │
+│   Memory: %.1f MB / %.1f MB%-24s │
+│   Clock Offset: %+dμs%-28s │
+`, m.goroutines, memAllocMB, memSysMB, "", m.syncOffset, "")
 }
 
 // handleKey handles keyboard input
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
+		// Send quit signal to player
+		if m.volumeCtrl != nil {
+			select {
+			case m.volumeCtrl.Quit <- QuitMsg{}:
+			default:
+				// Channel full, skip
+			}
+		}
 		return m, tea.Quit
 	case "up":
 		if m.volume < 100 {
 			m.volume += 5
 			if m.volume > 100 {
 				m.volume = 100
+			}
+			// Send volume change to player via channel
+			if m.volumeCtrl != nil {
+				select {
+				case m.volumeCtrl.Changes <- VolumeChangeMsg{Volume: m.volume, Muted: m.muted}:
+				default:
+					// Channel full, skip
+				}
 			}
 		}
 	case "down":
@@ -197,9 +222,25 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.volume < 0 {
 				m.volume = 0
 			}
+			// Send volume change to player via channel
+			if m.volumeCtrl != nil {
+				select {
+				case m.volumeCtrl.Changes <- VolumeChangeMsg{Volume: m.volume, Muted: m.muted}:
+				default:
+					// Channel full, skip
+				}
+			}
 		}
 	case "m":
 		m.muted = !m.muted
+		// Send volume change to player via channel
+		if m.volumeCtrl != nil {
+			select {
+			case m.volumeCtrl.Changes <- VolumeChangeMsg{Volume: m.volume, Muted: m.muted}:
+			default:
+				// Channel full, skip
+			}
+		}
 	case "d":
 		m.showDebug = !m.showDebug
 	}
@@ -239,6 +280,11 @@ func (m *Model) applyStatus(msg StatusMsg) {
 		m.played = msg.Played
 		m.dropped = msg.Dropped
 	}
+	if msg.Goroutines != 0 {
+		m.goroutines = msg.Goroutines
+		m.memAlloc = msg.MemAlloc
+		m.memSys = msg.MemSys
+	}
 }
 
 // StatusMsg updates TUI state
@@ -259,7 +305,20 @@ type StatusMsg struct {
 	Received    int64
 	Played      int64
 	Dropped     int64
+	BufferDepth int
+	Goroutines  int
+	MemAlloc    uint64
+	MemSys      uint64
 }
+
+// VolumeChangeMsg requests a volume change
+type VolumeChangeMsg struct {
+	Volume int
+	Muted  bool
+}
+
+// QuitMsg signals the player should quit
+type QuitMsg struct{}
 
 // Utility functions
 func renderBar(value, max, width int) string {

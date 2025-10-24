@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"runtime"
 	"time"
 
 	"github.com/Resonate-Protocol/resonate-go/internal/audio"
@@ -14,7 +15,9 @@ import (
 	"github.com/Resonate-Protocol/resonate-go/internal/player"
 	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
 	"github.com/Resonate-Protocol/resonate-go/internal/sync"
+	"github.com/Resonate-Protocol/resonate-go/internal/ui"
 	"github.com/Resonate-Protocol/resonate-go/internal/version"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 )
 
@@ -24,19 +27,22 @@ type Config struct {
 	Port       int
 	Name       string
 	BufferMs   int
+	UseTUI     bool
 }
 
 // Player represents the main player application
 type Player struct {
-	config    Config
-	client    *client.Client
-	clockSync *sync.ClockSync
-	scheduler *player.Scheduler
-	output    *player.Output
-	discovery *discovery.Manager
-	decoder   audio.Decoder
-	ctx       context.Context
-	cancel    context.CancelFunc
+	config     Config
+	client     *client.Client
+	clockSync  *sync.ClockSync
+	scheduler  *player.Scheduler
+	output     *player.Output
+	discovery  *discovery.Manager
+	decoder    audio.Decoder
+	tuiProg    *tea.Program
+	volumeCtrl *ui.VolumeControl
+	ctx        context.Context
+	cancel     context.CancelFunc
 }
 
 // New creates a new player
@@ -57,15 +63,21 @@ func New(config Config) *Player {
 
 // Start starts the player
 func (p *Player) Start() error {
-	// TUI temporarily disabled for debugging
-	// tuiProg, err := ui.Run()
-	// if err != nil {
-	// 	return fmt.Errorf("failed to start TUI: %w", err)
-	// }
-	// p.tuiProg = tuiProg
-	// go p.tuiProg.Run()
+	// Start TUI if enabled
+	if p.config.UseTUI {
+		p.volumeCtrl = ui.NewVolumeControl()
+		tuiProg, err := ui.Run(p.volumeCtrl)
+		if err != nil {
+			return fmt.Errorf("failed to start TUI: %w", err)
+		}
+		p.tuiProg = tuiProg
+		go p.tuiProg.Run()
 
-	log.Printf("TUI disabled - logging to file for debugging")
+		// Start volume control handler
+		go p.handleVolumeControl()
+	} else {
+		log.Printf("TUI disabled - logging to file for debugging")
+	}
 
 	// Start discovery if no manual server
 	if p.config.ServerAddr == "" {
@@ -151,10 +163,25 @@ func (p *Player) connect(serverAddr string) error {
 
 	log.Printf("Connected to server: %s", serverAddr)
 
+	// Update TUI
+	connected := true
+	p.updateTUI(ui.StatusMsg{
+		Connected:  &connected,
+		ServerName: serverAddr,
+	})
+
 	// Perform initial clock sync before starting audio handlers
 	if err := p.performInitialSync(); err != nil {
 		log.Printf("Initial clock sync failed: %v", err)
 	}
+
+	// Update TUI with sync status
+	offset, rtt, quality := p.clockSync.GetStats()
+	p.updateTUI(ui.StatusMsg{
+		SyncOffset:  offset,
+		SyncRTT:     rtt,
+		SyncQuality: quality,
+	})
 
 	// Start component goroutines
 	go p.handleAudioChunks()
@@ -162,6 +189,7 @@ func (p *Player) connect(serverAddr string) error {
 	go p.handleStreamStart()
 	go p.handleMetadata()
 	go p.clockSyncLoop()
+	go p.statsUpdateLoop()
 
 	return nil
 }
@@ -241,6 +269,14 @@ func (p *Player) handleStreamStart() {
 
 			log.Printf("Stream starting: %s %dHz %dch %dbit",
 				start.Player.Codec, start.Player.SampleRate, start.Player.Channels, start.Player.BitDepth)
+
+			// Update TUI with stream info
+			p.updateTUI(ui.StatusMsg{
+				Codec:      start.Player.Codec,
+				SampleRate: start.Player.SampleRate,
+				Channels:   start.Player.Channels,
+				BitDepth:   start.Player.BitDepth,
+			})
 
 			format := audio.Format{
 				Codec:      start.Player.Codec,
@@ -357,7 +393,87 @@ func (p *Player) handleMetadata() {
 		select {
 		case meta := <-p.client.Metadata:
 			log.Printf("Metadata: %s - %s (%s)", meta.Artist, meta.Title, meta.Album)
-			// TODO: Send to TUI
+
+			// Update TUI with metadata
+			p.updateTUI(ui.StatusMsg{
+				Title:  meta.Title,
+				Artist: meta.Artist,
+				Album:  meta.Album,
+			})
+
+		case <-p.ctx.Done():
+			return
+		}
+	}
+}
+
+// handleVolumeControl processes volume changes from TUI
+func (p *Player) handleVolumeControl() {
+	if p.volumeCtrl == nil {
+		return
+	}
+
+	for {
+		select {
+		case vol := <-p.volumeCtrl.Changes:
+			log.Printf("Volume change: %d%%, muted=%v", vol.Volume, vol.Muted)
+
+			// Apply to output
+			if p.output != nil {
+				p.output.SetVolume(vol.Volume)
+				p.output.SetMuted(vol.Muted)
+			}
+
+			// Send state to server
+			if p.client != nil {
+				p.client.SendState(protocol.ClientState{
+					Volume: vol.Volume,
+					Muted:  vol.Muted,
+				})
+			}
+
+		case <-p.volumeCtrl.Quit:
+			log.Printf("Received quit signal from TUI")
+			p.Stop()
+			return
+
+		case <-p.ctx.Done():
+			return
+		}
+	}
+}
+
+// statsUpdateLoop periodically updates TUI with playback statistics
+func (p *Player) statsUpdateLoop() {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			// Collect runtime stats
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			numGoroutines := runtime.NumGoroutine()
+
+			msg := ui.StatusMsg{
+				Goroutines: numGoroutines,
+				MemAlloc:   m.Alloc,
+				MemSys:     m.Sys,
+			}
+
+			// Add scheduler stats if available
+			if p.scheduler != nil {
+				stats := p.scheduler.Stats()
+				bufferDepth := p.scheduler.BufferDepth()
+
+				msg.Received = stats.Received
+				msg.Played = stats.Played
+				msg.Dropped = stats.Dropped
+				msg.BufferDepth = bufferDepth
+			}
+
+			p.updateTUI(msg)
 
 		case <-p.ctx.Done():
 			return
@@ -375,5 +491,12 @@ func (p *Player) Stop() {
 
 	if p.output != nil {
 		p.output.Close()
+	}
+}
+
+// updateTUI sends a status update to the TUI if enabled
+func (p *Player) updateTUI(msg ui.StatusMsg) {
+	if p.tuiProg != nil {
+		p.tuiProg.Send(msg)
 	}
 }

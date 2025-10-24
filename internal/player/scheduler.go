@@ -120,6 +120,12 @@ func (s *Scheduler) Stats() SchedulerStats {
 	return s.stats
 }
 
+// BufferDepth returns the current buffer queue depth in milliseconds
+func (s *Scheduler) BufferDepth() int {
+	// Each buffer is typically 10ms (480 samples at 48kHz)
+	return s.bufferQ.Len() * 10
+}
+
 // Stop stops the scheduler
 func (s *Scheduler) Stop() {
 	s.cancel()

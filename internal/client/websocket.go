@@ -182,13 +182,9 @@ func (c *Client) readMessages() {
 			return
 		}
 
-		log.Printf("ReadMessage: type=%d, len=%d bytes", messageType, len(data))
-
 		if messageType == websocket.BinaryMessage {
-			log.Printf("Routing to handleBinaryMessage")
 			c.handleBinaryMessage(data)
 		} else if messageType == websocket.TextMessage {
-			log.Printf("Routing to handleJSONMessage")
 			c.handleJSONMessage(data)
 		} else {
 			log.Printf("Unknown WebSocket message type: %d", messageType)
@@ -198,16 +194,12 @@ func (c *Client) readMessages() {
 
 // handleBinaryMessage handles audio chunks
 func (c *Client) handleBinaryMessage(data []byte) {
-	log.Printf("handleBinaryMessage called: len=%d bytes", len(data))
-
 	if len(data) < 9 {
 		log.Printf("Invalid binary message: too short")
 		return
 	}
 
 	msgType := data[0]
-	log.Printf("Binary message type byte: %d", msgType)
-
 	if msgType != 1 {
 		log.Printf("Unknown binary message type: %d", msgType)
 		return
@@ -216,8 +208,6 @@ func (c *Client) handleBinaryMessage(data []byte) {
 	timestamp := int64(binary.BigEndian.Uint64(data[1:9]))
 	audioData := data[9:]
 
-	log.Printf("WebSocket: Received binary chunk, timestamp=%d, size=%d", timestamp, len(audioData))
-
 	chunk := AudioChunk{
 		Timestamp: timestamp,
 		Data:      audioData,
@@ -225,9 +215,7 @@ func (c *Client) handleBinaryMessage(data []byte) {
 
 	select {
 	case c.AudioChunks <- chunk:
-		log.Printf("WebSocket: Chunk sent to channel")
 	case <-c.ctx.Done():
-		log.Printf("WebSocket: Context done, dropping chunk")
 	}
 }
 
@@ -239,6 +227,7 @@ func (c *Client) handleJSONMessage(data []byte) {
 		return
 	}
 
+	log.Printf("Received message type: %s", msg.Type)
 	payloadBytes, _ := json.Marshal(msg.Payload)
 
 	switch msg.Type {
@@ -278,6 +267,7 @@ func (c *Client) handleJSONMessage(data []byte) {
 		var update protocol.SessionUpdate
 		json.Unmarshal(payloadBytes, &update)
 		log.Printf("Session update: group=%s, state=%s", update.GroupID, update.PlaybackState)
+		log.Printf("Full session/update payload: %s", string(payloadBytes))
 		// For now, just log it - we could use this to update player state
 
 	default:
