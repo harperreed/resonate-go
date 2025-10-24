@@ -32,17 +32,18 @@ type Config struct {
 
 // Player represents the main player application
 type Player struct {
-	config     Config
-	client     *client.Client
-	clockSync  *sync.ClockSync
-	scheduler  *player.Scheduler
-	output     *player.Output
-	discovery  *discovery.Manager
-	decoder    audio.Decoder
-	tuiProg    *tea.Program
-	volumeCtrl *ui.VolumeControl
-	ctx        context.Context
-	cancel     context.CancelFunc
+	config      Config
+	client      *client.Client
+	clockSync   *sync.ClockSync
+	scheduler   *player.Scheduler
+	output      *player.Output
+	discovery   *discovery.Manager
+	decoder     audio.Decoder
+	tuiProg     *tea.Program
+	volumeCtrl  *ui.VolumeControl
+	ctx         context.Context
+	cancel      context.CancelFunc
+	playerState string // "idle" or "playing"
 }
 
 // New creates a new player
@@ -53,11 +54,12 @@ func New(config Config) *Player {
 	sync.SetGlobalClockSync(clockSync) // Make it globally accessible for CurrentMicros()
 
 	return &Player{
-		config:    config,
-		clockSync: clockSync,
-		output:    player.NewOutput(),
-		ctx:       ctx,
-		cancel:    cancel,
+		config:      config,
+		clockSync:   clockSync,
+		output:      player.NewOutput(),
+		ctx:         ctx,
+		cancel:      cancel,
+		playerState: "idle", // Start in idle state
 	}
 }
 
@@ -374,11 +376,19 @@ func (p *Player) handleControls() {
 			switch cmd.Command {
 			case "volume":
 				p.output.SetVolume(cmd.Volume)
-				p.client.SendState(protocol.ClientState{Volume: cmd.Volume})
+				p.client.SendState(protocol.ClientState{
+					State:  p.playerState,
+					Volume: cmd.Volume,
+					Muted:  p.output.IsMuted(),
+				})
 
 			case "mute":
 				p.output.SetMuted(cmd.Mute)
-				p.client.SendState(protocol.ClientState{Muted: cmd.Mute})
+				p.client.SendState(protocol.ClientState{
+					State:  p.playerState,
+					Volume: p.output.GetVolume(),
+					Muted:  cmd.Mute,
+				})
 			}
 
 		case <-p.ctx.Done():
@@ -427,6 +437,7 @@ func (p *Player) handleVolumeControl() {
 			// Send state to server
 			if p.client != nil {
 				p.client.SendState(protocol.ClientState{
+					State:  p.playerState,
 					Volume: vol.Volume,
 					Muted:  vol.Muted,
 				})

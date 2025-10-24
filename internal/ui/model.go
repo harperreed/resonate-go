@@ -4,6 +4,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Resonate-Protocol/resonate-go/internal/sync"
 	tea "github.com/charmbracelet/bubbletea"
@@ -116,37 +117,61 @@ func (m Model) renderHeader() string {
 		syncText = "Degraded"
 	}
 
-	return fmt.Sprintf(`┌─ Resonate Player ────────────────────────────────────┐
-│ Status: %-45s │
-│ Sync:   %s %-42s │
-├──────────────────────────────────────────────────────┤
-`, connStatus, syncIcon, syncText)
+	// Use terminal width for responsive layout
+	width := m.width
+	if width < 60 {
+		width = 60 // Minimum width
+	}
+	innerWidth := width - 4 // Account for borders
+
+	titleWidth := width - 20 // Space for "┌─ Resonate Player " prefix
+	title := "┌─ Resonate Player " + repeatString("─", titleWidth) + "┐\n"
+
+	statusLine := fmt.Sprintf("│ Status: %-*s │\n", innerWidth-9, truncate(connStatus, innerWidth-9))
+	syncLine := fmt.Sprintf("│ Sync:   %s %-*s │\n", syncIcon, innerWidth-11, truncate(syncText, innerWidth-11))
+	separator := "├" + repeatString("─", width-2) + "┤\n"
+
+	return title + statusLine + syncLine + separator
 }
 
 // renderStreamInfo renders current stream and metadata
 func (m Model) renderStreamInfo() string {
+	width := m.width
+	if width < 60 {
+		width = 60
+	}
+	innerWidth := width - 4
+
 	if !m.connected || m.codec == "" {
-		return "│ No stream                                            │\n"
+		return fmt.Sprintf("│ %-*s │\n", innerWidth, "No stream")
 	}
 
-	s := "│ Now Playing:                                         │\n"
+	s := fmt.Sprintf("│ %-*s │\n", innerWidth, "Now Playing:")
 	if m.title != "" {
-		s += fmt.Sprintf("│   Track:  %-42s │\n", truncate(m.title, 42))
-		s += fmt.Sprintf("│   Artist: %-42s │\n", truncate(m.artist, 42))
-		s += fmt.Sprintf("│   Album:  %-42s │\n", truncate(m.album, 42))
+		metaWidth := innerWidth - 10 // Account for "  Track:  " prefix
+		s += fmt.Sprintf("│   Track:  %-*s │\n", innerWidth-10, truncate(m.title, metaWidth))
+		s += fmt.Sprintf("│   Artist: %-*s │\n", innerWidth-10, truncate(m.artist, metaWidth))
+		s += fmt.Sprintf("│   Album:  %-*s │\n", innerWidth-10, truncate(m.album, metaWidth))
 	} else {
-		s += "│   (No metadata)                                      │\n"
+		s += fmt.Sprintf("│   %-*s │\n", innerWidth-3, "(No metadata)")
 	}
 
-	s += "│                                                      │\n"
-	s += fmt.Sprintf("│ Format: %s %dHz %s %d-bit%-17s │\n",
-		m.codec, m.sampleRate, channelName(m.channels), m.bitDepth, "")
+	s += fmt.Sprintf("│ %-*s │\n", innerWidth, "")
+	formatStr := fmt.Sprintf("Format: %s %dHz %s %d-bit",
+		m.codec, m.sampleRate, channelName(m.channels), m.bitDepth)
+	s += fmt.Sprintf("│ %-*s │\n", innerWidth, formatStr)
 
 	return s
 }
 
 // renderControls renders volume and buffer status
 func (m Model) renderControls() string {
+	width := m.width
+	if width < 60 {
+		width = 60
+	}
+	innerWidth := width - 4
+
 	muteIcon := ""
 	if m.muted {
 		muteIcon = " 🔇"
@@ -154,38 +179,67 @@ func (m Model) renderControls() string {
 
 	volumeBar := renderBar(m.volume, 100, 10)
 
-	return fmt.Sprintf("│                                                      │\n"+
-		"│ Volume: [%s] %d%%%s%-17s │\n"+
-		"│ Buffer: %dms (%d chunks)%-24s │\n",
-		volumeBar, m.volume, muteIcon, "",
-		m.bufferDepth, m.bufferDepth/10, "")
+	s := fmt.Sprintf("│ %-*s │\n", innerWidth, "")
+	volumeStr := fmt.Sprintf("Volume: [%s] %d%%%s", volumeBar, m.volume, muteIcon)
+	s += fmt.Sprintf("│ %-*s │\n", innerWidth, volumeStr)
+
+	bufferStr := fmt.Sprintf("Buffer: %dms (%d chunks)", m.bufferDepth, m.bufferDepth/10)
+	s += fmt.Sprintf("│ %-*s │\n", innerWidth, bufferStr)
+
+	return s
 }
 
 // renderStats renders playback statistics
 func (m Model) renderStats() string {
-	return fmt.Sprintf(`├──────────────────────────────────────────────────────┤
-│ Stats:  RX: %d  Played: %d  Dropped: %d%-8s │
-│                                                      │
-`, m.received, m.played, m.dropped, "")
+	width := m.width
+	if width < 60 {
+		width = 60
+	}
+	innerWidth := width - 4
+
+	separator := "├" + repeatString("─", width-2) + "┤\n"
+	statsStr := fmt.Sprintf("Stats:  RX: %d  Played: %d  Dropped: %d", m.received, m.played, m.dropped)
+	statsLine := fmt.Sprintf("│ %-*s │\n", innerWidth, statsStr)
+	emptyLine := fmt.Sprintf("│ %-*s │\n", innerWidth, "")
+
+	return separator + statsLine + emptyLine
 }
 
 // renderHelp renders keyboard shortcuts
 func (m Model) renderHelp() string {
-	return `│ ↑/↓:Volume  m:Mute  r:Reconnect  d:Debug  q:Quit   │
-└──────────────────────────────────────────────────────┘
-`
+	width := m.width
+	if width < 60 {
+		width = 60
+	}
+	innerWidth := width - 4
+
+	helpStr := "↑/↓:Volume  m:Mute  r:Reconnect  d:Debug  q:Quit"
+	helpLine := fmt.Sprintf("│ %-*s │\n", innerWidth, helpStr)
+	bottom := "└" + repeatString("─", width-2) + "┘\n"
+
+	return helpLine + bottom
 }
 
 // renderDebug renders debug information
 func (m Model) renderDebug() string {
+	width := m.width
+	if width < 60 {
+		width = 60
+	}
+	innerWidth := width - 4
+
 	memAllocMB := float64(m.memAlloc) / 1024 / 1024
 	memSysMB := float64(m.memSys) / 1024 / 1024
 
-	return fmt.Sprintf(`│ DEBUG:                                               │
-│   Goroutines: %-38d │
-│   Memory: %.1f MB / %.1f MB%-24s │
-│   Clock Offset: %+dμs%-28s │
-`, m.goroutines, memAllocMB, memSysMB, "", m.syncOffset, "")
+	debugTitle := fmt.Sprintf("│ %-*s │\n", innerWidth, "DEBUG:")
+	goroutineStr := fmt.Sprintf("  Goroutines: %d", m.goroutines)
+	goroutineLine := fmt.Sprintf("│ %-*s │\n", innerWidth, goroutineStr)
+	memStr := fmt.Sprintf("  Memory: %.1f MB / %.1f MB", memAllocMB, memSysMB)
+	memLine := fmt.Sprintf("│ %-*s │\n", innerWidth, memStr)
+	clockStr := fmt.Sprintf("  Clock Offset: %+dμs", m.syncOffset)
+	clockLine := fmt.Sprintf("│ %-*s │\n", innerWidth, clockStr)
+
+	return debugTitle + goroutineLine + memLine + clockLine
 }
 
 // handleKey handles keyboard input
@@ -324,15 +378,7 @@ type QuitMsg struct{}
 // Utility functions
 func renderBar(value, max, width int) string {
 	filled := (value * width) / max
-	bar := ""
-	for i := 0; i < width; i++ {
-		if i < filled {
-			bar += "█"
-		} else {
-			bar += "░"
-		}
-	}
-	return bar
+	return strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
 }
 
 func truncate(s string, length int) string {
@@ -347,4 +393,11 @@ func channelName(channels int) string {
 		return "Mono"
 	}
 	return "Stereo"
+}
+
+func repeatString(s string, count int) string {
+	if count <= 0 {
+		return ""
+	}
+	return strings.Repeat(s, count)
 }
