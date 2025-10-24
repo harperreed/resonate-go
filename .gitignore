@@ -1,5 +1,6 @@
 # Binaries
 resonate-player
+resonate-server
 *.exe
 *.dll
 *.so

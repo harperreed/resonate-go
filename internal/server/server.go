@@ -1,0 +1,497 @@
+// ABOUTME: Main server implementation for Resonate Protocol
+// ABOUTME: Manages WebSocket connections, client state, and audio streaming
+package server
+
+import (
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+
+	"github.com/Resonate-Protocol/resonate-go/internal/discovery"
+	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+)
+
+const (
+	// Protocol constants
+	ProtocolVersion = 1
+
+	// Message type for binary audio chunks (player role uses type 1)
+	AudioChunkMessageType = 1
+)
+
+// Config holds server configuration
+type Config struct {
+	Port       int
+	Name       string
+	EnableMDNS bool
+	Debug      bool
+}
+
+// Server represents the Resonate server
+type Server struct {
+	config    Config
+	serverID  string
+
+	// WebSocket upgrader
+	upgrader  websocket.Upgrader
+
+	// HTTP server
+	httpServer *http.Server
+	mux        *http.ServeMux
+
+	// Client management
+	clients   map[string]*Client
+	clientsMu sync.RWMutex
+
+	// Server clock (monotonic microseconds)
+	clockStart time.Time
+
+	// Audio streaming
+	audioEngine *AudioEngine
+
+	// mDNS discovery
+	mdnsManager *discovery.Manager
+
+	// Control
+	stopChan    chan struct{}
+	stopOnce    sync.Once // Ensure Stop() is only called once
+	shutdownMu  sync.RWMutex
+	isShutdown  bool
+	wg          sync.WaitGroup
+}
+
+// Client represents a connected client
+type Client struct {
+	ID           string
+	Name         string
+	Conn         *websocket.Conn
+	Roles        []string
+	Capabilities *protocol.PlayerSupport
+
+	// State
+	State        string
+	Volume       int
+	Muted        bool
+
+	// Output channel for messages
+	sendChan     chan interface{}
+
+	mu           sync.RWMutex
+}
+
+// New creates a new server instance
+func New(config Config) *Server {
+	mux := http.NewServeMux()
+
+	return &Server{
+		config:     config,
+		serverID:   uuid.New().String(),
+		mux:        mux,
+		upgrader: websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool {
+				return true // Allow all origins for now
+			},
+		},
+		clients:    make(map[string]*Client),
+		clockStart: time.Now(),
+		stopChan:   make(chan struct{}),
+	}
+}
+
+// Start starts the server
+func (s *Server) Start() error {
+	log.Printf("Server starting: %s (ID: %s)", s.config.Name, s.serverID)
+
+	// Create audio engine
+	s.audioEngine = NewAudioEngine(s)
+
+	// Start mDNS advertisement if enabled
+	if s.config.EnableMDNS {
+		s.mdnsManager = discovery.NewManager(discovery.Config{
+			ServiceName: s.config.Name,
+			Port:        s.config.Port,
+			ServerMode:  true, // Advertise as server
+		})
+
+		if err := s.mdnsManager.Advertise(); err != nil {
+			log.Printf("Failed to start mDNS advertisement: %v", err)
+		} else {
+			log.Printf("mDNS advertisement started")
+		}
+	}
+
+	// Set up HTTP handlers
+	s.mux.HandleFunc("/resonate", s.handleWebSocket)
+
+	// Start audio streaming
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.audioEngine.Start()
+	}()
+
+	// Start HTTP server
+	addr := fmt.Sprintf(":%d", s.config.Port)
+	log.Printf("WebSocket server listening on %s", addr)
+
+	s.httpServer = &http.Server{
+		Addr:    addr,
+		Handler: s.mux,
+	}
+
+	// Run server in goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		if err := s.httpServer.ListenAndServe(); err != http.ErrServerClosed {
+			errChan <- err
+		}
+	}()
+
+	// Wait for stop signal or server error
+	select {
+	case <-s.stopChan:
+		log.Printf("Server shutting down...")
+	case err := <-errChan:
+		log.Printf("HTTP server error: %v", err)
+		return err
+	}
+
+	// Mark server as shutting down to reject new connections
+	s.shutdownMu.Lock()
+	s.isShutdown = true
+	s.shutdownMu.Unlock()
+
+	// Stop audio engine
+	s.audioEngine.Stop()
+
+	// Stop mDNS
+	if s.mdnsManager != nil {
+		s.mdnsManager.Stop()
+	}
+
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.httpServer.Shutdown(ctx); err != nil {
+		log.Printf("HTTP server shutdown error: %v", err)
+	}
+
+	s.wg.Wait()
+	log.Printf("Server stopped cleanly")
+
+	return nil
+}
+
+// Stop stops the server
+func (s *Server) Stop() {
+	s.stopOnce.Do(func() {
+		close(s.stopChan)
+	})
+}
+
+// handleWebSocket handles WebSocket connections
+func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("WebSocket upgrade error: %v", err)
+		return
+	}
+
+	log.Printf("New WebSocket connection from %s", r.RemoteAddr)
+
+	// Handle the connection
+	s.handleConnection(conn)
+}
+
+// handleConnection manages a client connection
+func (s *Server) handleConnection(conn *websocket.Conn) {
+	defer conn.Close()
+
+	// Check if server is shutting down
+	s.shutdownMu.RLock()
+	if s.isShutdown {
+		s.shutdownMu.RUnlock()
+		log.Printf("Rejecting connection during shutdown")
+		return
+	}
+	s.shutdownMu.RUnlock()
+
+	if s.config.Debug {
+		log.Printf("[DEBUG] New connection, waiting for handshake")
+	}
+
+	// Wait for client/hello
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		log.Printf("Error reading hello: %v", err)
+		return
+	}
+
+	var msg protocol.Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Printf("Error unmarshaling message: %v", err)
+		return
+	}
+
+	if msg.Type != "client/hello" {
+		log.Printf("Expected client/hello, got %s", msg.Type)
+		return
+	}
+
+	// Parse client hello
+	helloData, err := json.Marshal(msg.Payload)
+	if err != nil {
+		log.Printf("Error marshaling hello payload: %v", err)
+		return
+	}
+
+	var hello protocol.ClientHello
+	if err := json.Unmarshal(helloData, &hello); err != nil {
+		log.Printf("Error unmarshaling client hello: %v", err)
+		return
+	}
+
+	log.Printf("Client hello: %s (ID: %s, Roles: %v)", hello.Name, hello.ClientID, hello.SupportedRoles)
+
+	// Create client
+	client := &Client{
+		ID:           hello.ClientID,
+		Name:         hello.Name,
+		Conn:         conn,
+		Roles:        hello.SupportedRoles,
+		Capabilities: hello.PlayerSupport,
+		State:        "idle",
+		Volume:       100,
+		Muted:        false,
+		sendChan:     make(chan interface{}, 100),
+	}
+
+	// Register client
+	s.clientsMu.Lock()
+	s.clients[client.ID] = client
+	s.clientsMu.Unlock()
+
+	defer func() {
+		s.clientsMu.Lock()
+		delete(s.clients, client.ID)
+		s.clientsMu.Unlock()
+		close(client.sendChan)
+		log.Printf("Client disconnected: %s", client.Name)
+	}()
+
+	// Send server/hello
+	serverHello := protocol.ServerHello{
+		ServerID: s.serverID,
+		Name:     s.config.Name,
+		Version:  ProtocolVersion,
+	}
+
+	if err := s.sendMessage(client, "server/hello", serverHello); err != nil {
+		log.Printf("Error sending server hello: %v", err)
+		return
+	}
+
+	// Start writer goroutine
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.clientWriter(client)
+	}()
+
+	// Start stream for this client if it's a player
+	if s.hasRole(client, "player") {
+		s.audioEngine.AddClient(client)
+		defer s.audioEngine.RemoveClient(client)
+	}
+
+	// Read messages from client
+	for {
+		_, data, err := conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket error: %v", err)
+			}
+			break
+		}
+
+		s.handleClientMessage(client, data)
+	}
+}
+
+// clientWriter sends messages to the client
+func (s *Server) clientWriter(client *Client) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case msg, ok := <-client.sendChan:
+			if !ok {
+				return
+			}
+
+			// Determine message type
+			switch v := msg.(type) {
+			case []byte:
+				// Binary message
+				if err := client.Conn.WriteMessage(websocket.BinaryMessage, v); err != nil {
+					log.Printf("Error writing binary message: %v", err)
+					return
+				}
+			default:
+				// JSON message
+				data, err := json.Marshal(v)
+				if err != nil {
+					log.Printf("Error marshaling message: %v", err)
+					continue
+				}
+				if err := client.Conn.WriteMessage(websocket.TextMessage, data); err != nil {
+					log.Printf("Error writing text message: %v", err)
+					return
+				}
+			}
+
+		case <-ticker.C:
+			// Send ping
+			if err := client.Conn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(10*time.Second)); err != nil {
+				return
+			}
+		}
+	}
+}
+
+// handleClientMessage processes messages from clients
+func (s *Server) handleClientMessage(client *Client, data []byte) {
+	var msg protocol.Message
+	if err := json.Unmarshal(data, &msg); err != nil {
+		log.Printf("Error unmarshaling message: %v", err)
+		return
+	}
+
+	switch msg.Type {
+	case "client/time":
+		s.handleTimeSync(client, msg.Payload)
+	case "player/update":
+		s.handlePlayerUpdate(client, msg.Payload)
+	default:
+		log.Printf("Unknown message type: %s", msg.Type)
+	}
+}
+
+// handleTimeSync responds to time synchronization requests
+func (s *Server) handleTimeSync(client *Client, payload interface{}) {
+	// Capture receive time as early as possible
+	serverRecv := s.getClockMicros()
+
+	// Parse client time
+	timeData, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshaling time payload: %v", err)
+		return
+	}
+
+	var clientTime protocol.ClientTime
+	if err := json.Unmarshal(timeData, &clientTime); err != nil {
+		log.Printf("Error unmarshaling client time: %v", err)
+		return
+	}
+
+	// Capture transmit time as late as possible (before send)
+	serverSend := s.getClockMicros()
+
+	if s.config.Debug {
+		log.Printf("[DEBUG] Time sync for %s: t1=%d, t2=%d, t3=%d",
+			client.Name, clientTime.ClientTransmitted, serverRecv, serverSend)
+	}
+
+	response := protocol.ServerTime{
+		ClientTransmitted: clientTime.ClientTransmitted,
+		ServerReceived:    serverRecv,
+		ServerTransmitted: serverSend,
+	}
+
+	if err := s.sendMessage(client, "server/time", response); err != nil {
+		log.Printf("Error sending server time: %v", err)
+	}
+}
+
+// handlePlayerUpdate handles state updates from players
+func (s *Server) handlePlayerUpdate(client *Client, payload interface{}) {
+	stateData, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Error marshaling state payload: %v", err)
+		return
+	}
+
+	var state protocol.ClientState
+	if err := json.Unmarshal(stateData, &state); err != nil {
+		log.Printf("Error unmarshaling client state: %v", err)
+		return
+	}
+
+	client.mu.Lock()
+	client.State = state.State
+	client.Volume = state.Volume
+	client.Muted = state.Muted
+	client.mu.Unlock()
+
+	log.Printf("Client %s state: %s (vol: %d, muted: %v)", client.Name, state.State, state.Volume, state.Muted)
+}
+
+// sendMessage sends a JSON message to a client
+func (s *Server) sendMessage(client *Client, msgType string, payload interface{}) error {
+	msg := protocol.Message{
+		Type:    msgType,
+		Payload: payload,
+	}
+
+	select {
+	case client.sendChan <- msg:
+		return nil
+	default:
+		return fmt.Errorf("client send buffer full")
+	}
+}
+
+// sendBinary sends binary data to a client
+func (s *Server) sendBinary(client *Client, data []byte) error {
+	select {
+	case client.sendChan <- data:
+		return nil
+	default:
+		return fmt.Errorf("client send buffer full")
+	}
+}
+
+// getClockMicros returns the server clock in microseconds
+func (s *Server) getClockMicros() int64 {
+	return time.Since(s.clockStart).Microseconds()
+}
+
+// hasRole checks if a client has a specific role
+func (s *Server) hasRole(client *Client, role string) bool {
+	for _, r := range client.Roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+// CreateAudioChunk creates a binary audio chunk message
+func CreateAudioChunk(timestamp int64, audioData []byte) []byte {
+	// Binary format: [message_type:1][timestamp:8][audio_data:N]
+	chunk := make([]byte, 1+8+len(audioData))
+	chunk[0] = AudioChunkMessageType
+	binary.BigEndian.PutUint64(chunk[1:9], uint64(timestamp))
+	copy(chunk[9:], audioData)
+	return chunk
+}
