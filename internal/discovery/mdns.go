@@ -15,6 +15,7 @@ import (
 type Config struct {
 	ServiceName string
 	Port        int
+	ServerMode  bool // If true, advertise as _resonate-server._tcp, otherwise _resonate._tcp
 }
 
 // Manager handles mDNS operations
@@ -51,9 +52,15 @@ func (m *Manager) Advertise() error {
 		return fmt.Errorf("failed to get local IPs: %w", err)
 	}
 
+	// Choose service type based on mode
+	serviceType := "_resonate._tcp"
+	if m.config.ServerMode {
+		serviceType = "_resonate-server._tcp"
+	}
+
 	service, err := mdns.NewMDNSService(
 		m.config.ServiceName,
-		"_resonate._tcp",
+		serviceType,
 		"",
 		"",
 		m.config.Port,
@@ -69,7 +76,7 @@ func (m *Manager) Advertise() error {
 		return fmt.Errorf("failed to create mdns server: %w", err)
 	}
 
-	log.Printf("Advertising mDNS service: %s on port %d", m.config.ServiceName, m.config.Port)
+	log.Printf("Advertising mDNS service: %s on port %d (type: %s)", m.config.ServiceName, m.config.Port, serviceType)
 
 	go func() {
 		<-m.ctx.Done()
