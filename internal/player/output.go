@@ -41,8 +41,19 @@ func NewOutput() *Output {
 
 // Initialize sets up oto with the specified format
 func (o *Output) Initialize(format audio.Format) error {
+	// If already initialized with same format, reuse the existing context
+	if o.otoCtx != nil && o.format.SampleRate == format.SampleRate &&
+		o.format.Channels == format.Channels && o.format.BitDepth == format.BitDepth {
+		log.Printf("Audio output already initialized with same format, reusing context")
+		return nil
+	}
+
+	// If format changed, we can't reinitialize oto (it only allows one context per process)
+	// Log a warning but continue using the existing context
 	if o.otoCtx != nil {
-		o.Close()
+		log.Printf("Warning: format change detected (%dHz %dch -> %dHz %dch) but oto doesn't support reinitialization. Continuing with existing context.",
+			o.format.SampleRate, o.format.Channels, format.SampleRate, format.Channels)
+		return nil
 	}
 
 	op := &oto.NewContextOptions{
