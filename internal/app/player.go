@@ -149,25 +149,26 @@ func (p *Player) connect(serverAddr string) error {
 			SoftwareVersion: version.Version,
 		},
 		PlayerSupport: protocol.PlayerSupport{
-			// New spec format - advertise all supported sample rates for hi-res audio
+			// New spec format - hi-res formats first (MA provider picks first format)
 			SupportFormats: []protocol.AudioFormat{
-				// Opus (48kHz only - Opus spec requirement)
-				{Codec: "opus", Channels: 2, SampleRate: 48000, BitDepth: 16},
-				// PCM - all common sample rates
-				{Codec: "pcm", Channels: 2, SampleRate: 44100, BitDepth: 16},
-				{Codec: "pcm", Channels: 2, SampleRate: 48000, BitDepth: 16},
-				{Codec: "pcm", Channels: 2, SampleRate: 88200, BitDepth: 24},
-				{Codec: "pcm", Channels: 2, SampleRate: 96000, BitDepth: 24},
-				{Codec: "pcm", Channels: 2, SampleRate: 176400, BitDepth: 24},
+				// PCM hi-res - highest quality first
 				{Codec: "pcm", Channels: 2, SampleRate: 192000, BitDepth: 24},
+				{Codec: "pcm", Channels: 2, SampleRate: 176400, BitDepth: 24},
+				{Codec: "pcm", Channels: 2, SampleRate: 96000, BitDepth: 24},
+				{Codec: "pcm", Channels: 2, SampleRate: 88200, BitDepth: 24},
+				// PCM standard quality
+				{Codec: "pcm", Channels: 2, SampleRate: 48000, BitDepth: 16},
+				{Codec: "pcm", Channels: 2, SampleRate: 44100, BitDepth: 16},
+				// Opus fallback (48kHz only - Opus spec requirement)
+				{Codec: "opus", Channels: 2, SampleRate: 48000, BitDepth: 16},
 			},
 			BufferCapacity:    1048576,
 			SupportedCommands: []string{"volume", "mute"},
-			// Legacy format (Music Assistant compatibility - separate arrays)
-			SupportCodecs:      []string{"opus", "pcm"},
-			SupportChannels:    []int{1, 2},
-			SupportSampleRates: []int{44100, 48000, 88200, 96000, 176400, 192000},
-			SupportBitDepth:    []int{16, 24},
+			// Legacy format (Music Assistant compatibility - highest quality first)
+			SupportCodecs:      []string{"pcm", "opus"},
+			SupportChannels:    []int{2, 1},
+			SupportSampleRates: []int{192000, 176400, 96000, 88200, 48000, 44100},
+			SupportBitDepth:    []int{24, 16},
 		},
 		MetadataSupport: protocol.MetadataSupport{
 			SupportPictureFormats: []string{"jpeg", "png", "webp"},
