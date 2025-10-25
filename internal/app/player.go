@@ -141,18 +141,24 @@ func (p *Player) connect(serverAddr string) error {
 			SoftwareVersion: version.Version,
 		},
 		PlayerSupport: protocol.PlayerSupport{
-			// New spec format
+			// New spec format - advertise all supported sample rates for hi-res audio
 			SupportFormats: []protocol.AudioFormat{
+				// Opus (48kHz only - Opus spec requirement)
 				{Codec: "opus", Channels: 2, SampleRate: 48000, BitDepth: 16},
-				{Codec: "flac", Channels: 2, SampleRate: 48000, BitDepth: 16},
+				// PCM - all common sample rates
+				{Codec: "pcm", Channels: 2, SampleRate: 44100, BitDepth: 16},
 				{Codec: "pcm", Channels: 2, SampleRate: 48000, BitDepth: 16},
+				{Codec: "pcm", Channels: 2, SampleRate: 88200, BitDepth: 24},
+				{Codec: "pcm", Channels: 2, SampleRate: 96000, BitDepth: 24},
+				{Codec: "pcm", Channels: 2, SampleRate: 176400, BitDepth: 24},
+				{Codec: "pcm", Channels: 2, SampleRate: 192000, BitDepth: 24},
 			},
 			BufferCapacity:    1048576,
 			SupportedCommands: []string{"volume", "mute"},
 			// Legacy format (Music Assistant compatibility - separate arrays)
-			SupportCodecs:      []string{"opus", "flac", "pcm"},
+			SupportCodecs:      []string{"opus", "pcm"},
 			SupportChannels:    []int{1, 2},
-			SupportSampleRates: []int{44100, 48000},
+			SupportSampleRates: []int{44100, 48000, 88200, 96000, 176400, 192000},
 			SupportBitDepth:    []int{16, 24},
 		},
 	}
