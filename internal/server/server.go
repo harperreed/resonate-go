@@ -32,6 +32,7 @@ type Config struct {
 	Name       string
 	EnableMDNS bool
 	Debug      bool
+	UseTUI     bool
 	AudioFile  string // Path to audio file to stream (MP3, FLAC, WAV). Empty = test tone
 }
 
@@ -59,6 +60,10 @@ type Server struct {
 
 	// mDNS discovery
 	mdnsManager *discovery.Manager
+
+	// TUI
+	tui         *ServerTUI
+	startTime   time.Time
 
 	// Control
 	stopChan    chan struct{}
@@ -120,12 +125,28 @@ func New(config Config) *Server {
 		},
 		clients:    make(map[string]*Client),
 		clockStart: time.Now(),
+		startTime:  time.Now(),
 		stopChan:   make(chan struct{}),
 	}
 }
 
 // Start starts the server
 func (s *Server) Start() error {
+	// Start TUI if enabled
+	if s.config.UseTUI {
+		s.tui = NewServerTUI(s.config.Name, s.config.Port)
+
+		// Start TUI in a goroutine
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.tui.Start(s.config.Name, s.config.Port)
+		}()
+
+		// Give TUI time to initialize
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	log.Printf("Server starting: %s (ID: %s)", s.config.Name, s.serverID)
 
 	// Create audio engine
@@ -177,11 +198,18 @@ func (s *Server) Start() error {
 		}
 	}()
 
-	// Wait for stop signal or server error
+	// Wait for stop signal, TUI quit, or server error
 	var serverErr error
+	var tuiQuitChan <-chan struct{}
+	if s.tui != nil {
+		tuiQuitChan = s.tui.QuitChan()
+	}
+
 	select {
 	case <-s.stopChan:
 		log.Printf("Server shutting down...")
+	case <-tuiQuitChan:
+		log.Printf("TUI quit requested, shutting down...")
 	case err := <-errChan:
 		log.Printf("HTTP server error: %v", err)
 		serverErr = err
@@ -192,6 +220,11 @@ func (s *Server) Start() error {
 	s.shutdownMu.Lock()
 	s.isShutdown = true
 	s.shutdownMu.Unlock()
+
+	// Stop TUI first so it can display shutdown message
+	if s.tui != nil {
+		s.tui.Stop()
+	}
 
 	// Stop audio engine
 	s.audioEngine.Stop()
@@ -337,12 +370,18 @@ func (s *Server) handleConnection(conn *websocket.Conn) {
 	s.clients[client.ID] = client
 	s.clientsMu.Unlock()
 
+	// Update TUI with new client
+	s.updateTUI()
+
 	defer func() {
 		s.clientsMu.Lock()
 		delete(s.clients, client.ID)
 		s.clientsMu.Unlock()
 		close(client.sendChan)
 		log.Printf("Client disconnected: %s", client.Name)
+
+		// Update TUI after client disconnect
+		s.updateTUI()
 	}()
 
 	// Send server/hello

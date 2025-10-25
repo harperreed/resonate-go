@@ -20,22 +20,31 @@ var (
 	logFile   = flag.String("log-file", "resonate-server.log", "Log file path")
 	debug     = flag.Bool("debug", false, "Enable debug logging")
 	noMDNS    = flag.Bool("no-mdns", false, "Disable mDNS advertisement")
+	noTUI     = flag.Bool("no-tui", false, "Disable TUI, use streaming logs instead")
 	audioFile = flag.String("audio", "", "Audio file to stream (MP3, FLAC, WAV). If not specified, plays test tone")
 )
 
 func main() {
 	flag.Parse()
 
-	// Set up logging (both file and console)
+	// Determine if we should use TUI or streaming logs
+	useTUI := !*noTUI
+
+	// Set up logging
 	f, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening log file: %v", err)
 	}
 	defer f.Close()
 
-	// Log to both file and stdout
-	multiWriter := io.MultiWriter(os.Stdout, f)
-	log.SetOutput(multiWriter)
+	if useTUI {
+		// TUI mode: log only to file
+		log.SetOutput(f)
+	} else {
+		// Streaming logs mode: log to both stdout and file
+		multiWriter := io.MultiWriter(os.Stdout, f)
+		log.SetOutput(multiWriter)
+	}
 
 	// Determine server name
 	serverName := *name
@@ -47,12 +56,14 @@ func main() {
 		serverName = fmt.Sprintf("%s-resonate-server", hostname)
 	}
 
-	log.Printf("Starting Resonate Server: %s on port %d", serverName, *port)
-	if *debug {
-		log.Printf("Debug logging enabled")
+	if !useTUI {
+		log.Printf("Starting Resonate Server: %s on port %d", serverName, *port)
+		if *debug {
+			log.Printf("Debug logging enabled")
+		}
+		log.Printf("Logging to: %s", *logFile)
+		log.Printf("Press Ctrl-C to stop")
 	}
-	log.Printf("Logging to: %s", *logFile)
-	log.Printf("Press Ctrl-C to stop")
 
 	// Create server
 	config := server.Config{
@@ -60,6 +71,7 @@ func main() {
 		Name:       serverName,
 		EnableMDNS: !*noMDNS,
 		Debug:      *debug,
+		UseTUI:     useTUI,
 		AudioFile:  *audioFile,
 	}
 
