@@ -53,12 +53,6 @@ jobs:
           - os: linux
             arch: amd64
             runner: ubuntu-latest
-          - os: darwin
-            arch: amd64
-            runner: macos-13
-          - os: darwin
-            arch: arm64
-            runner: macos-latest
 
     steps:
     - name: Checkout code
@@ -170,55 +164,39 @@ jobs:
 
           ### Downloads
 
-          **Player:**
-          - Linux (amd64): `resonate-player-linux-amd64.tar.gz`
-          - macOS (Intel): `resonate-player-darwin-amd64.tar.gz`
-          - macOS (Apple Silicon): `resonate-player-darwin-arm64.tar.gz`
+          **Linux (x86_64) - Statically Linked**
 
-          **Server:**
-          - Linux (amd64): `resonate-server-linux-amd64.tar.gz`
-          - macOS (Intel): `resonate-server-darwin-amd64.tar.gz`
-          - macOS (Apple Silicon): `resonate-server-darwin-arm64.tar.gz`
+          - **Player:** `resonate-player-linux-amd64.tar.gz`
+          - **Server:** `resonate-server-linux-amd64.tar.gz`
+
+          ✨ **No dependencies required!** These binaries are fully statically linked.
 
           ### Installation
 
-          #### Linux (Statically Linked - No Dependencies Required!)
-
-          Linux binaries are **statically linked** and ready to run:
-
           ```bash
-          # Extract
+          # Download and extract
           tar xzf resonate-player-linux-amd64.tar.gz
 
-          # Run directly - no installation needed!
+          # Run immediately - no installation needed!
           ./resonate-player-linux-amd64
           ```
 
-          #### macOS (Requires Dependencies)
+          That's it! The binary is self-contained and ready to use.
 
-          macOS binaries require audio libraries to be installed first:
+          ### Building from Source (macOS/Other Platforms)
 
-          **Install via Homebrew:**
-          ```bash
-          brew install opus opusfile flac
-          ```
-
-          **Or use the install script:**
-          ```bash
-          curl -fsSL https://raw.githubusercontent.com/harperreed/resonate-go/${{ steps.version.outputs.VERSION }}/install-deps.sh | bash
-          ```
-
-          **Then download and run:**
+          For macOS or other platforms, you can build from source:
 
           ```bash
-          # Extract
-          tar xzf resonate-player-*.tar.gz
+          git clone https://github.com/harperreed/resonate-go.git
+          cd resonate-go
 
-          # Make executable (if needed)
-          chmod +x resonate-player-*
+          # Install dependencies
+          brew install opus opusfile flac  # macOS
+          # or: sudo apt-get install libopus-dev libopusfile-dev libflac-dev  # Linux
 
-          # Run
-          ./resonate-player-*
+          # Build
+          go build -o resonate-player .
           ```
 
           ### Changes
