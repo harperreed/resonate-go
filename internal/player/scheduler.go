@@ -165,10 +165,18 @@ func NewBufferQueue() *BufferQueue {
 func (q *BufferQueue) Len() int { return len(q.items) }
 
 func (q *BufferQueue) Less(i, j int) bool {
+	// Bounds check to prevent crashes
+	if i >= len(q.items) || j >= len(q.items) {
+		return false
+	}
 	return q.items[i].PlayAt.Before(q.items[j].PlayAt)
 }
 
 func (q *BufferQueue) Swap(i, j int) {
+	// Bounds check to prevent crashes
+	if i >= len(q.items) || j >= len(q.items) {
+		return
+	}
 	q.items[i], q.items[j] = q.items[j], q.items[i]
 }
 
@@ -178,11 +186,17 @@ func (q *BufferQueue) Push(x interface{}) {
 
 func (q *BufferQueue) Pop() interface{} {
 	n := len(q.items)
+	if n == 0 {
+		return audio.Buffer{}
+	}
 	item := q.items[n-1]
 	q.items = q.items[:n-1]
 	return item
 }
 
 func (q *BufferQueue) Peek() audio.Buffer {
+	if len(q.items) == 0 {
+		return audio.Buffer{}
+	}
 	return q.items[0]
 }
