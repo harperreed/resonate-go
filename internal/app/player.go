@@ -161,6 +161,12 @@ func (p *Player) connect(serverAddr string) error {
 			SupportSampleRates: []int{44100, 48000, 88200, 96000, 176400, 192000},
 			SupportBitDepth:    []int{16, 24},
 		},
+		MetadataSupport: protocol.MetadataSupport{
+			SupportPictureFormats: []string{}, // No artwork support yet
+		},
+		VisualizerSupport: protocol.VisualizerSupport{
+			BufferCapacity: 1048576, // 1MB buffer for visualization data
+		},
 	}
 
 	p.client = client.NewClient(clientConfig)

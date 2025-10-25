@@ -18,12 +18,14 @@ import (
 
 // Config holds client configuration
 type Config struct {
-	ServerAddr string
-	ClientID   string
-	Name       string
-	Version    int
-	DeviceInfo protocol.DeviceInfo
-	PlayerSupport protocol.PlayerSupport
+	ServerAddr        string
+	ClientID          string
+	Name              string
+	Version           int
+	DeviceInfo        protocol.DeviceInfo
+	PlayerSupport     protocol.PlayerSupport
+	MetadataSupport   protocol.MetadataSupport
+	VisualizerSupport protocol.VisualizerSupport
 }
 
 // Client represents a WebSocket client
@@ -98,12 +100,14 @@ func (c *Client) Connect() error {
 func (c *Client) handshake() error {
 	// Send client/hello
 	hello := protocol.ClientHello{
-		ClientID:       c.config.ClientID,
-		Name:           c.config.Name,
-		Version:        c.config.Version,
-		SupportedRoles: []string{"player"},
-		DeviceInfo:     &c.config.DeviceInfo,
-		PlayerSupport:  &c.config.PlayerSupport,
+		ClientID:          c.config.ClientID,
+		Name:              c.config.Name,
+		Version:           c.config.Version,
+		SupportedRoles:    []string{"player", "metadata", "visualizer"},
+		DeviceInfo:        &c.config.DeviceInfo,
+		PlayerSupport:     &c.config.PlayerSupport,
+		MetadataSupport:   &c.config.MetadataSupport,
+		VisualizerSupport: &c.config.VisualizerSupport,
 	}
 
 	msg := protocol.Message{

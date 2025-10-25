@@ -10,12 +10,14 @@ type Message struct {
 
 // ClientHello is sent by clients to initiate the handshake
 type ClientHello struct {
-	ClientID       string         `json:"client_id"`
-	Name           string         `json:"name"`
-	Version        int            `json:"version"`
-	SupportedRoles []string       `json:"supported_roles"`
-	DeviceInfo     *DeviceInfo    `json:"device_info,omitempty"`
-	PlayerSupport  *PlayerSupport `json:"player_support,omitempty"`
+	ClientID          string             `json:"client_id"`
+	Name              string             `json:"name"`
+	Version           int                `json:"version"`
+	SupportedRoles    []string           `json:"supported_roles"`
+	DeviceInfo        *DeviceInfo        `json:"device_info,omitempty"`
+	PlayerSupport     *PlayerSupport     `json:"player_support,omitempty"`
+	MetadataSupport   *MetadataSupport   `json:"metadata_support,omitempty"`
+	VisualizerSupport *VisualizerSupport `json:"visualizer_support,omitempty"`
 }
 
 // DeviceInfo contains device identification
@@ -45,6 +47,19 @@ type AudioFormat struct {
 	Channels   int    `json:"channels"`
 	SampleRate int    `json:"sample_rate"`
 	BitDepth   int    `json:"bit_depth"`
+}
+
+// MetadataSupport describes metadata/artwork capabilities
+type MetadataSupport struct {
+	SupportPictureFormats []string `json:"support_picture_formats"`
+	MediaWidth            int      `json:"media_width,omitempty"`
+	MediaHeight           int      `json:"media_height,omitempty"`
+}
+
+// VisualizerSupport describes visualization capabilities
+type VisualizerSupport struct {
+	BufferCapacity int `json:"buffer_capacity,omitempty"`
+	// FFT details - to be determined by spec
 }
 
 // ServerHello is the server's response to client/hello
