@@ -90,13 +90,22 @@ jobs:
       run: |
         mkdir -p dist
 
+        # Set build flags based on platform
+        if [ "${{ matrix.os }}" = "linux" ]; then
+          # Linux: Static linking is straightforward
+          export CGO_ENABLED=1
+          export CGO_LDFLAGS="-static"
+          BUILD_FLAGS="-ldflags '-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }} -linkmode external -extldflags -static' -tags netgo"
+        else
+          # macOS: Dynamic linking (static is complex with frameworks)
+          BUILD_FLAGS="-ldflags '-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}'"
+        fi
+
         # Player
-        go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" \
-          -o dist/resonate-player-${{ matrix.os }}-${{ matrix.arch }} .
+        go build $BUILD_FLAGS -o dist/resonate-player-${{ matrix.os }}-${{ matrix.arch }} .
 
         # Server
-        go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" \
-          -o dist/resonate-server-${{ matrix.os }}-${{ matrix.arch }} ./cmd/resonate-server
+        go build $BUILD_FLAGS -o dist/resonate-server-${{ matrix.os }}-${{ matrix.arch }} ./cmd/resonate-server
 
     - name: Create archives
       run: |
@@ -173,21 +182,25 @@ jobs:
 
           ### Installation
 
-          #### 1. Install Dependencies
+          #### Linux (Statically Linked - No Dependencies Required!)
 
-          **macOS (via Homebrew):**
+          Linux binaries are **statically linked** and ready to run:
+
+          ```bash
+          # Extract
+          tar xzf resonate-player-linux-amd64.tar.gz
+
+          # Run directly - no installation needed!
+          ./resonate-player-linux-amd64
+          ```
+
+          #### macOS (Requires Dependencies)
+
+          macOS binaries require audio libraries to be installed first:
+
+          **Install via Homebrew:**
           ```bash
           brew install opus opusfile flac
-          ```
-
-          **Linux (Debian/Ubuntu):**
-          ```bash
-          sudo apt-get install libopus-dev libopusfile-dev libflac-dev
-          ```
-
-          **Linux (Fedora/RHEL):**
-          ```bash
-          sudo dnf install opus-devel opusfile-devel flac-devel
           ```
 
           **Or use the install script:**
@@ -195,7 +208,7 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/harperreed/resonate-go/${{ steps.version.outputs.VERSION }}/install-deps.sh | bash
           ```
 
-          #### 2. Download and Run
+          **Then download and run:**
 
           ```bash
           # Extract
