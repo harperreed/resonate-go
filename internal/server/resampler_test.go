@@ -124,7 +124,7 @@ func TestResampleStereo(t *testing.T) {
 	// Create input with different L/R patterns
 	input := make([]int16, 20) // 10 stereo samples
 	for i := 0; i < 10; i++ {
-		input[i*2] = 1000   // Left channel
+		input[i*2] = 1000    // Left channel
 		input[i*2+1] = -1000 // Right channel
 	}
 

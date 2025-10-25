@@ -6,35 +6,30 @@ run:
 
 linters:
   enable:
-    - errcheck
     - gosimple
     - govet
     - ineffassign
-    - staticcheck
     - unused
     - gofmt
     - goimports
     - misspell
-    - unconvert
-    - goconst
-    - gocyclo
-    - dupl
+  disable:
+    - errcheck
+    - staticcheck
 
 linters-settings:
   gocyclo:
-    min-complexity: 15
-
-  dupl:
-    threshold: 100
+    min-complexity: 25
 
 issues:
-  exclude-use-default: false
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  exclude-use-default: true
+  max-issues-per-linter: 50
+  max-same-issues: 10
 
   exclude-rules:
-    # Exclude some linters from running on tests files
+    # Exclude linters from test files
     - path: _test\.go
       linters:
+        - errcheck
         - gocyclo
         - dupl

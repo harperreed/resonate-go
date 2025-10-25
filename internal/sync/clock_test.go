@@ -35,10 +35,10 @@ func TestLoopOriginEstablishment(t *testing.T) {
 
 	// Process first sync response
 	now := time.Now().UnixMicro()
-	t1 := now - 10000          // Sent 10ms ago
-	t2 := int64(1000000)       // Server loop time at receive
-	t3 := t2 + 100             // Server processed in 0.1ms
-	t4 := now                  // Received now
+	t1 := now - 10000    // Sent 10ms ago
+	t2 := int64(1000000) // Server loop time at receive
+	t3 := t2 + 100       // Server processed in 0.1ms
+	t4 := now            // Received now
 
 	cs.ProcessSyncResponse(t1, t2, t3, t4)
 

@@ -15,8 +15,8 @@ type Format struct {
 
 // Buffer represents decoded PCM audio
 type Buffer struct {
-	Timestamp  int64     // Server timestamp (microseconds)
-	PlayAt     time.Time // Local play time
-	Samples    []int16   // PCM samples (int16 format to avoid conversions)
-	Format     Format
+	Timestamp int64     // Server timestamp (microseconds)
+	PlayAt    time.Time // Local play time
+	Samples   []int16   // PCM samples (int16 format to avoid conversions)
+	Format    Format
 }

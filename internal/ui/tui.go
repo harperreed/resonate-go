@@ -23,9 +23,9 @@ func NewVolumeControl() *VolumeControl {
 // NewModel creates a new TUI model
 func NewModel(volCtrl *VolumeControl) Model {
 	return Model{
-		volume:      100,
-		state:       "idle",
-		volumeCtrl:  volCtrl,
+		volume:     100,
+		state:      "idle",
+		volumeCtrl: volCtrl,
 	}
 }
 

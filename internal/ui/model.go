@@ -13,49 +13,49 @@ import (
 // Model represents the TUI state
 type Model struct {
 	// Connection
-	connected    bool
-	serverName   string
+	connected  bool
+	serverName string
 
 	// Sync
-	syncOffset   int64
-	syncRTT      int64
-	syncQuality  sync.Quality
+	syncOffset  int64
+	syncRTT     int64
+	syncQuality sync.Quality
 
 	// Stream
-	codec        string
-	sampleRate   int
-	channels     int
-	bitDepth     int
+	codec      string
+	sampleRate int
+	channels   int
+	bitDepth   int
 
 	// Metadata
-	title        string
-	artist       string
-	album        string
-	artworkPath  string
+	title       string
+	artist      string
+	album       string
+	artworkPath string
 
 	// Playback
-	state        string
-	volume       int
-	muted        bool
+	state  string
+	volume int
+	muted  bool
 
 	// Stats
-	received     int64
-	played       int64
-	dropped      int64
-	bufferDepth  int
+	received    int64
+	played      int64
+	dropped     int64
+	bufferDepth int
 
 	// Debug
-	showDebug    bool
-	goroutines   int
-	memAlloc     uint64
-	memSys       uint64
+	showDebug  bool
+	goroutines int
+	memAlloc   uint64
+	memSys     uint64
 
 	// Dimensions
-	width        int
-	height       int
+	width  int
+	height int
 
 	// Volume control channel
-	volumeCtrl   *VolumeControl
+	volumeCtrl *VolumeControl
 }
 
 // Init initializes the model

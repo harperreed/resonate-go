@@ -38,11 +38,11 @@ type Config struct {
 
 // Server represents the Resonate server
 type Server struct {
-	config    Config
-	serverID  string
+	config   Config
+	serverID string
 
 	// WebSocket upgrader
-	upgrader  websocket.Upgrader
+	upgrader websocket.Upgrader
 
 	// HTTP server
 	httpServer *http.Server
@@ -62,15 +62,15 @@ type Server struct {
 	mdnsManager *discovery.Manager
 
 	// TUI
-	tui         *ServerTUI
-	startTime   time.Time
+	tui       *ServerTUI
+	startTime time.Time
 
 	// Control
-	stopChan    chan struct{}
-	stopOnce    sync.Once // Ensure Stop() is only called once
-	shutdownMu  sync.RWMutex
-	isShutdown  bool
-	wg          sync.WaitGroup
+	stopChan   chan struct{}
+	stopOnce   sync.Once // Ensure Stop() is only called once
+	shutdownMu sync.RWMutex
+	isShutdown bool
+	wg         sync.WaitGroup
 }
 
 // Client represents a connected client
@@ -82,18 +82,18 @@ type Client struct {
 	Capabilities *protocol.PlayerSupport
 
 	// State
-	State        string
-	Volume       int
-	Muted        bool
+	State  string
+	Volume int
+	Muted  bool
 
 	// Negotiated codec for this client
-	Codec        string // "pcm" or "opus" (flac falls back to pcm)
-	OpusEncoder  *OpusEncoder // Opus encoder (if using opus codec)
+	Codec       string       // "pcm" or "opus" (flac falls back to pcm)
+	OpusEncoder *OpusEncoder // Opus encoder (if using opus codec)
 
 	// Output channel for messages
-	sendChan     chan interface{}
+	sendChan chan interface{}
 
-	mu           sync.RWMutex
+	mu sync.RWMutex
 }
 
 // New creates a new server instance
@@ -101,9 +101,9 @@ func New(config Config) *Server {
 	mux := http.NewServeMux()
 
 	return &Server{
-		config:     config,
-		serverID:   uuid.New().String(),
-		mux:        mux,
+		config:   config,
+		serverID: uuid.New().String(),
+		mux:      mux,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				// TODO: For production deployment, implement proper origin validation

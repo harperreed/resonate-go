@@ -3,7 +3,7 @@
 package version
 
 const (
-	Version = "0.1.0"
-	Product = "Resonate Go Player"
+	Version      = "0.1.0"
+	Product      = "Resonate Go Player"
 	Manufacturer = "resonate-go"
 )

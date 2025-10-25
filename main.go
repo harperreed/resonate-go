@@ -15,14 +15,13 @@ import (
 )
 
 var (
-	serverAddr  = flag.String("server", "", "Manual server address (skip mDNS)")
-	port        = flag.Int("port", 8927, "Port for mDNS advertisement")
-	name        = flag.String("name", "", "Player friendly name (default: hostname-resonate-player)")
-	bufferMs    = flag.Int("buffer-ms", 150, "Jitter buffer size in milliseconds")
-	logFile     = flag.String("log-file", "resonate-player.log", "Log file path")
-	debug       = flag.Bool("debug", false, "Enable debug logging")
-	noTUI       = flag.Bool("no-tui", false, "Disable TUI, use streaming logs instead")
-	streamLogs  = flag.Bool("stream-logs", false, "Alias for -no-tui")
+	serverAddr = flag.String("server", "", "Manual server address (skip mDNS)")
+	port       = flag.Int("port", 8927, "Port for mDNS advertisement")
+	name       = flag.String("name", "", "Player friendly name (default: hostname-resonate-player)")
+	bufferMs   = flag.Int("buffer-ms", 150, "Jitter buffer size in milliseconds")
+	logFile    = flag.String("log-file", "resonate-player.log", "Log file path")
+	noTUI      = flag.Bool("no-tui", false, "Disable TUI, use streaming logs instead")
+	streamLogs = flag.Bool("stream-logs", false, "Alias for -no-tui")
 )
 
 func main() {
@@ -36,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error opening log file: %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if useTUI {
 		// TUI mode: log only to file

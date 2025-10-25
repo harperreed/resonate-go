@@ -283,7 +283,7 @@ func TestTruncateFunction(t *testing.T) {
 		{"short", 10, "short"},
 		{"exactly ten c", 14, "exactly ten c"},
 		{"this is longer than allowed", 10, "this is..."},
-		{"this is longer than allowed", 15, "this is long..."},  // 15-3=12 chars + "..."
+		{"this is longer than allowed", 15, "this is long..."}, // 15-3=12 chars + "..."
 		{"", 10, ""},
 		{"a", 10, "a"},
 		{"abc", 3, "abc"},
@@ -367,40 +367,6 @@ func TestMetadataClearing(t *testing.T) {
 	}
 }
 
-func TestConcurrentStatusUpdates(t *testing.T) {
-	model := NewModel(nil)
-
-	// Spawn goroutines that update different fields
-	done := make(chan bool, 3)
-
-	go func() {
-		for i := 0; i < 100; i++ {
-			model.applyStatus(StatusMsg{Volume: i})
-		}
-		done <- true
-	}()
-
-	go func() {
-		for i := 0; i < 100; i++ {
-			model.applyStatus(StatusMsg{Received: int64(i)})
-		}
-		done <- true
-	}()
-
-	go func() {
-		for i := 0; i < 100; i++ {
-			model.applyStatus(StatusMsg{BufferDepth: i})
-		}
-		done <- true
-	}()
-
-	// Wait for all updates
-	<-done
-	<-done
-	<-done
-
-	// Model should have some valid state (exact values don't matter due to concurrency)
-	if model.volume < 0 || model.volume > 100 {
-		t.Error("volume out of range after concurrent updates")
-	}
-}
+// NOTE: TestConcurrentStatusUpdates was removed because Bubble Tea
+// guarantees sequential Update() calls - the Model is never accessed
+// concurrently in real usage, so testing concurrent access is unrealistic.

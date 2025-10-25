@@ -30,15 +30,15 @@ type DeviceInfo struct {
 // PlayerSupport describes player capabilities
 type PlayerSupport struct {
 	// Spec fields (newer)
-	SupportFormats     []AudioFormat `json:"support_formats,omitempty"`
-	BufferCapacity     int           `json:"buffer_capacity,omitempty"`
-	SupportedCommands  []string      `json:"supported_commands,omitempty"`
+	SupportFormats    []AudioFormat `json:"support_formats,omitempty"`
+	BufferCapacity    int           `json:"buffer_capacity,omitempty"`
+	SupportedCommands []string      `json:"supported_commands,omitempty"`
 
 	// Legacy fields (Music Assistant compatibility - uses separate arrays)
-	SupportCodecs      []string      `json:"support_codecs,omitempty"`
-	SupportChannels    []int         `json:"support_channels,omitempty"`
-	SupportSampleRates []int         `json:"support_sample_rates,omitempty"`
-	SupportBitDepth    []int         `json:"support_bit_depth,omitempty"`
+	SupportCodecs      []string `json:"support_codecs,omitempty"`
+	SupportChannels    []int    `json:"support_channels,omitempty"`
+	SupportSampleRates []int    `json:"support_sample_rates,omitempty"`
+	SupportBitDepth    []int    `json:"support_bit_depth,omitempty"`
 }
 
 // AudioFormat describes a supported audio format
@@ -135,7 +135,7 @@ type ClientTime struct {
 
 // ServerTime is the response to client/time
 type ServerTime struct {
-	ClientTransmitted  int64 `json:"client_transmitted"`  // Echoed client timestamp
-	ServerReceived     int64 `json:"server_received"`     // Server receive timestamp
-	ServerTransmitted  int64 `json:"server_transmitted"`  // Server send timestamp
+	ClientTransmitted int64 `json:"client_transmitted"` // Echoed client timestamp
+	ServerReceived    int64 `json:"server_received"`    // Server receive timestamp
+	ServerTransmitted int64 `json:"server_transmitted"` // Server send timestamp
 }

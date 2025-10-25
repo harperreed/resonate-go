@@ -11,12 +11,12 @@ import (
 // ClockSync manages clock synchronization with drift compensation
 type ClockSync struct {
 	mu                  sync.RWMutex
-	serverLoopStartUnix int64     // Unix microseconds when server loop started
-	rtt                 int64     // Latest round-trip time
+	serverLoopStartUnix int64 // Unix microseconds when server loop started
+	rtt                 int64 // Latest round-trip time
 	quality             Quality
 	lastSync            time.Time
 	sampleCount         int
-	synced              bool      // True after first successful sync
+	synced              bool // True after first successful sync
 }
 
 // Quality represents sync quality
