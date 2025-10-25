@@ -6,13 +6,13 @@ import (
 	"testing"
 )
 
-func TestPortAudioImplementsOutput(t *testing.T) {
-	var _ Output = (*PortAudio)(nil)
+func TestOtoImplementsOutput(t *testing.T) {
+	var _ Output = (*Oto)(nil)
 }
 
-func TestNewPortAudio(t *testing.T) {
-	out := NewPortAudio()
+func TestNewOto(t *testing.T) {
+	out := NewOto()
 	if out == nil {
-		t.Fatal("NewPortAudio returned nil")
+		t.Fatal("NewOto returned nil")
 	}
 }
