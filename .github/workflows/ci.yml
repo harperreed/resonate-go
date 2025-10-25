@@ -110,20 +110,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libopus-dev libopusfile-dev libflac-dev portaudio19-dev
 
-    - name: Build all platforms
+    - name: Build native binaries
       run: |
-        mkdir -p bin
-        GOOS=linux GOARCH=amd64 go build -v -o bin/resonate-player-linux-amd64 .
-        GOOS=linux GOARCH=arm64 go build -v -o bin/resonate-player-linux-arm64 .
-        GOOS=darwin GOARCH=amd64 go build -v -o bin/resonate-player-darwin-amd64 .
-        GOOS=darwin GOARCH=arm64 go build -v -o bin/resonate-player-darwin-arm64 .
-        GOOS=linux GOARCH=amd64 go build -v -o bin/resonate-server-linux-amd64 ./cmd/resonate-server
-        GOOS=linux GOARCH=arm64 go build -v -o bin/resonate-server-linux-arm64 ./cmd/resonate-server
-        GOOS=darwin GOARCH=amd64 go build -v -o bin/resonate-server-darwin-amd64 ./cmd/resonate-server
-        GOOS=darwin GOARCH=arm64 go build -v -o bin/resonate-server-darwin-arm64 ./cmd/resonate-server
-
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: binaries
-        path: bin/
+        go build -v -o resonate-player .
+        go build -v -o resonate-server ./cmd/resonate-server
+        go build -v -o test-sync ./cmd/test-sync
