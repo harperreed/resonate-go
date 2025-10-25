@@ -1,0 +1,33 @@
+# ABOUTME: Pre-commit hooks configuration for code quality checks
+# ABOUTME: Runs formatting, linting, and tests before each commit
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+      - id: go-vet
+      - id: go-imports
+      - id: go-mod-tidy
+      - id: golangci-lint
+        args: ['--timeout=5m']
+      - id: go-unit-tests
+        args: ['-race', '-v']
+
+  - repo: local
+    hooks:
+      - id: go-build
+        name: go build
+        entry: make build
+        language: system
+        files: \.go$
+        pass_filenames: false

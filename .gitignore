@@ -13,6 +13,7 @@ dist/
 
 # Coverage
 *.out
+coverage.html
 
 # IDE
 .vscode/
