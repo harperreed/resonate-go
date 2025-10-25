@@ -5,6 +5,8 @@ resonate-server
 *.dll
 *.so
 *.dylib
+bin/
+dist/
 
 # Test binaries
 *.test

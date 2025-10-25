@@ -1,0 +1,40 @@
+# ABOUTME: golangci-lint configuration for CI linting
+# ABOUTME: Defines linters and rules for code quality checks
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - unconvert
+    - goconst
+    - gocyclo
+    - dupl
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+
+  dupl:
+    threshold: 100
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - dupl

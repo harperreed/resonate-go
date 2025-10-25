@@ -1,0 +1,131 @@
+# ABOUTME: Release workflow triggered by version tags
+# ABOUTME: Builds multi-platform binaries and creates GitHub releases
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopus-dev libopusfile-dev libflac-dev portaudio19-dev
+
+    - name: Get version from tag
+      id: version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+    - name: Build binaries
+      run: |
+        mkdir -p dist
+
+        # Player builds
+        echo "Building resonate-player..."
+        GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-player-linux-amd64 .
+        GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-player-linux-arm64 .
+        GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-player-darwin-amd64 .
+        GOOS=darwin GOARCH=arm64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-player-darwin-arm64 .
+
+        # Server builds
+        echo "Building resonate-server..."
+        GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-server-linux-amd64 ./cmd/resonate-server
+        GOOS=linux GOARCH=arm64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-server-linux-arm64 ./cmd/resonate-server
+        GOOS=darwin GOARCH=amd64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-server-darwin-amd64 ./cmd/resonate-server
+        GOOS=darwin GOARCH=arm64 go build -ldflags "-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}" -o dist/resonate-server-darwin-arm64 ./cmd/resonate-server
+
+    - name: Create archives
+      run: |
+        cd dist
+
+        # Create tar.gz archives for each binary
+        for binary in *; do
+          if [ -f "$binary" ]; then
+            tar czf "${binary}.tar.gz" "$binary"
+          fi
+        done
+
+        # List all archives
+        ls -lh *.tar.gz
+
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        # Get the previous tag
+        PREV_TAG=$(git describe --tags --abbrev=0 ${{ steps.version.outputs.VERSION }}^ 2>/dev/null || echo "")
+
+        if [ -z "$PREV_TAG" ]; then
+          echo "NOTES=Initial release" >> $GITHUB_OUTPUT
+        else
+          # Generate changelog between tags
+          NOTES=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${{ steps.version.outputs.VERSION }})
+          echo "NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.version.outputs.VERSION }}
+        name: Release ${{ steps.version.outputs.VERSION }}
+        body: |
+          ## Resonate Protocol ${{ steps.version.outputs.VERSION }}
+
+          ### Downloads
+
+          **Player:**
+          - Linux (amd64): `resonate-player-linux-amd64.tar.gz`
+          - Linux (arm64): `resonate-player-linux-arm64.tar.gz`
+          - macOS (Intel): `resonate-player-darwin-amd64.tar.gz`
+          - macOS (Apple Silicon): `resonate-player-darwin-arm64.tar.gz`
+
+          **Server:**
+          - Linux (amd64): `resonate-server-linux-amd64.tar.gz`
+          - Linux (arm64): `resonate-server-linux-arm64.tar.gz`
+          - macOS (Intel): `resonate-server-darwin-amd64.tar.gz`
+          - macOS (Apple Silicon): `resonate-server-darwin-arm64.tar.gz`
+
+          ### Installation
+
+          Download the appropriate binary for your platform, extract it, and run:
+
+          ```bash
+          # Extract
+          tar xzf resonate-player-*.tar.gz
+
+          # Make executable (if needed)
+          chmod +x resonate-player-*
+
+          # Run
+          ./resonate-player-*
+          ```
+
+          ### Changes
+
+          ${{ steps.release_notes.outputs.NOTES }}
+        files: |
+          dist/*.tar.gz
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
