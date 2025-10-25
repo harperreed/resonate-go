@@ -84,22 +84,18 @@ jobs:
       run: |
         mkdir -p dist
 
-        # Set build flags based on platform
-        if [ "${{ matrix.os }}" = "linux" ]; then
-          # Linux: Static linking is straightforward
-          export CGO_ENABLED=1
-          export CGO_LDFLAGS="-static"
-          BUILD_FLAGS="-ldflags '-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }} -linkmode external -extldflags -static' -tags netgo"
-        else
-          # macOS: Dynamic linking (static is complex with frameworks)
-          BUILD_FLAGS="-ldflags '-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${{ steps.version.outputs.VERSION }}'"
-        fi
+        # Linux: Static linking with proper CGO flags
+        export CGO_ENABLED=1
+        export CGO_LDFLAGS="-static"
+
+        VERSION="${{ steps.version.outputs.VERSION }}"
+        LDFLAGS="-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${VERSION} -linkmode external -extldflags -static"
 
         # Player
-        go build $BUILD_FLAGS -o dist/resonate-player-${{ matrix.os }}-${{ matrix.arch }} .
+        go build -ldflags "${LDFLAGS}" -tags netgo -o dist/resonate-player-${{ matrix.os }}-${{ matrix.arch }} .
 
         # Server
-        go build $BUILD_FLAGS -o dist/resonate-server-${{ matrix.os }}-${{ matrix.arch }} ./cmd/resonate-server
+        go build -ldflags "${LDFLAGS}" -tags netgo -o dist/resonate-server-${{ matrix.os }}-${{ matrix.arch }} ./cmd/resonate-server
 
     - name: Create archives
       run: |
