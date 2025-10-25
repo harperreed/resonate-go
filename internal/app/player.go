@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/Resonate-Protocol/resonate-go/internal/artwork"
 	"github.com/Resonate-Protocol/resonate-go/internal/audio"
 	"github.com/Resonate-Protocol/resonate-go/internal/client"
 	"github.com/Resonate-Protocol/resonate-go/internal/discovery"
@@ -41,6 +42,7 @@ type Player struct {
 	decoder     audio.Decoder
 	tuiProg     *tea.Program
 	volumeCtrl  *ui.VolumeControl
+	artwork     *artwork.Downloader
 	ctx         context.Context
 	cancel      context.CancelFunc
 	playerState string // "idle" or "playing"
@@ -53,10 +55,16 @@ func New(config Config) *Player {
 	clockSync := sync.NewClockSync()
 	sync.SetGlobalClockSync(clockSync) // Make it globally accessible for CurrentMicros()
 
+	artworkDL, err := artwork.NewDownloader()
+	if err != nil {
+		log.Printf("Failed to create artwork downloader: %v", err)
+	}
+
 	return &Player{
 		config:      config,
 		clockSync:   clockSync,
 		output:      player.NewOutput(),
+		artwork:     artworkDL,
 		ctx:         ctx,
 		cancel:      cancel,
 		playerState: "idle", // Start in idle state
@@ -162,7 +170,9 @@ func (p *Player) connect(serverAddr string) error {
 			SupportBitDepth:    []int{16, 24},
 		},
 		MetadataSupport: protocol.MetadataSupport{
-			SupportPictureFormats: []string{}, // No artwork support yet
+			SupportPictureFormats: []string{"jpeg", "png", "webp"},
+			MediaWidth:            600, // Request 600px artwork (good balance)
+			MediaHeight:           600,
 		},
 		VisualizerSupport: protocol.VisualizerSupport{
 			BufferCapacity: 1048576, // 1MB buffer for visualization data
@@ -439,11 +449,23 @@ func (p *Player) handleSessionUpdates() {
 				log.Printf("Session metadata: %s - %s (%s)",
 					update.Metadata.Artist, update.Metadata.Title, update.Metadata.Album)
 
+				// Download artwork if available
+				var artworkPath string
+				if update.Metadata.ArtworkURL != "" && p.artwork != nil {
+					path, err := p.artwork.Download(update.Metadata.ArtworkURL)
+					if err != nil {
+						log.Printf("Failed to download artwork: %v", err)
+					} else {
+						artworkPath = path
+					}
+				}
+
 				// Update TUI with metadata from session
 				p.updateTUI(ui.StatusMsg{
-					Title:  update.Metadata.Title,
-					Artist: update.Metadata.Artist,
-					Album:  update.Metadata.Album,
+					Title:       update.Metadata.Title,
+					Artist:      update.Metadata.Artist,
+					Album:       update.Metadata.Album,
+					ArtworkPath: artworkPath,
 				})
 			}
 

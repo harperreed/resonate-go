@@ -31,6 +31,7 @@ type Model struct {
 	title        string
 	artist       string
 	album        string
+	artworkPath  string
 
 	// Playback
 	state        string
@@ -152,6 +153,9 @@ func (m Model) renderStreamInfo() string {
 		s += fmt.Sprintf("│   Track:  %-*s │\n", innerWidth-10, truncate(m.title, metaWidth))
 		s += fmt.Sprintf("│   Artist: %-*s │\n", innerWidth-10, truncate(m.artist, metaWidth))
 		s += fmt.Sprintf("│   Album:  %-*s │\n", innerWidth-10, truncate(m.album, metaWidth))
+		if m.artworkPath != "" {
+			s += fmt.Sprintf("│   Art:    %-*s │\n", innerWidth-10, truncate(m.artworkPath, metaWidth))
+		}
 	} else {
 		s += fmt.Sprintf("│   %-*s │\n", innerWidth-3, "(No metadata)")
 	}
@@ -327,6 +331,9 @@ func (m *Model) applyStatus(msg StatusMsg) {
 		m.artist = msg.Artist
 		m.album = msg.Album
 	}
+	if msg.ArtworkPath != "" {
+		m.artworkPath = msg.ArtworkPath
+	}
 	// Volume is always applied when explicitly sent (can be 0 for silent)
 	// We rely on caller not sending Volume=0 in messages unless it's intentional
 	if msg.Volume != 0 {
@@ -356,6 +363,7 @@ type StatusMsg struct {
 	Title       string
 	Artist      string
 	Album       string
+	ArtworkPath string
 	Volume      int
 	Received    int64
 	Played      int64
