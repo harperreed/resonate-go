@@ -37,9 +37,9 @@ type SchedulerStats struct {
 func NewScheduler(clockSync *sync.ClockSync, jitterMs int) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Buffer 10 chunks (200ms at 20ms/chunk) before starting playback
-	// This prevents startup ticks and provides smooth playback start
-	bufferTarget := 10
+	// Buffer 25 chunks (500ms at 20ms/chunk) to match server's 500ms lead time
+	// This aligns with the server sending chunks at playbackTime = now + 500ms
+	bufferTarget := 25
 
 	return &Scheduler{
 		clockSync:    clockSync,
@@ -58,14 +58,14 @@ func (s *Scheduler) Schedule(buf audio.Buffer) {
 	// Convert server timestamp to local play time
 	buf.PlayAt = s.clockSync.ServerToLocalTime(buf.Timestamp)
 
-	// Log first few buffers and problematic ones
+	// Sanity logs for first 5 chunks showing timing
 	if s.stats.Received < 5 {
-		now := time.Now()
-		delay := buf.PlayAt.Sub(now)
-		offset, rtt, _ := s.clockSync.GetStats()
+		serverNow := sync.ServerMicrosNow()
+		diff := buf.Timestamp - serverNow
+		rtt, quality := s.clockSync.GetStats()
 
-		log.Printf("Scheduled buffer #%d: timestamp=%d, delay=%v, offset=%dμs, rtt=%dμs",
-			s.stats.Received, buf.Timestamp, delay, offset, rtt)
+		log.Printf("Chunk #%d: timestamp=%dµs, serverNow=%dµs, diff=%dµs (%.1fms), rtt=%dµs, quality=%v",
+			s.stats.Received, buf.Timestamp, serverNow, diff, float64(diff)/1000.0, rtt, quality)
 	}
 
 	s.stats.Received++

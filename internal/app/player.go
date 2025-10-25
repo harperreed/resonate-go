@@ -178,9 +178,9 @@ func (p *Player) connect(serverAddr string) error {
 	}
 
 	// Update TUI with sync status
-	offset, rtt, quality := p.clockSync.GetStats()
+	rtt, quality := p.clockSync.GetStats()
 	p.updateTUI(ui.StatusMsg{
-		SyncOffset:  offset,
+		SyncOffset:  0, // No longer tracking offset, using loop-origin method
 		SyncRTT:     rtt,
 		SyncQuality: quality,
 	})
@@ -200,15 +200,15 @@ func (p *Player) connect(serverAddr string) error {
 func (p *Player) performInitialSync() error {
 	log.Printf("Performing initial clock synchronization...")
 
-	// Do 5 quick sync rounds to establish offset
+	// Do 5 quick sync rounds to establish server loop origin
 	for i := 0; i < 5; i++ {
-		t1 := sync.ClientMicros() // Use raw client time for sync
+		t1 := time.Now().UnixMicro() // Client send time (Unix µs)
 		p.client.SendTimeSync(t1)
 
 		// Wait for response with timeout
 		select {
 		case resp := <-p.client.TimeSyncResp:
-			t4 := sync.ClientMicros() // Use raw client time for sync
+			t4 := time.Now().UnixMicro() // Client receive time (Unix µs)
 			p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
 
 		case <-time.After(500 * time.Millisecond):
@@ -219,8 +219,8 @@ func (p *Player) performInitialSync() error {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	offset, rtt, quality := p.clockSync.GetStats()
-	log.Printf("Initial clock sync complete: offset=%dμs, rtt=%dμs, quality=%v", offset, rtt, quality)
+	rtt, quality := p.clockSync.GetStats()
+	log.Printf("Initial clock sync complete: rtt=%dμs, quality=%v", rtt, quality)
 
 	return nil
 }
@@ -244,12 +244,12 @@ func (p *Player) clockSyncLoop() {
 			}
 
 		sendRequest:
-			t1 := sync.ClientMicros() // Use raw client time for sync
+			t1 := time.Now().UnixMicro() // Client send time (Unix µs)
 			p.client.SendTimeSync(t1)
 
 		case resp := <-p.client.TimeSyncResp:
 			// Process response asynchronously when it arrives
-			t4 := sync.ClientMicros() // Use raw client time for sync
+			t4 := time.Now().UnixMicro() // Client receive time (Unix µs)
 			p.clockSync.ProcessSyncResponse(resp.ClientTransmitted, resp.ServerReceived, resp.ServerTransmitted, t4)
 
 		case <-p.ctx.Done():
@@ -322,10 +322,10 @@ func (p *Player) handleAudioChunks() {
 
 			// Detailed logging for first few chunks
 			if chunkCount <= 5 {
-				ourTime := sync.CurrentMicros()
-				timeDiff := chunk.Timestamp - ourTime
-				log.Printf("Received audio chunk #%d: chunk_ts=%d, our_time=%d, diff=%dμs",
-					chunkCount, chunk.Timestamp, ourTime, timeDiff)
+				serverNow := sync.ServerMicrosNow()
+				timeDiff := chunk.Timestamp - serverNow
+				log.Printf("Received audio chunk #%d: chunk_ts=%d, server_now=%d, diff=%dμs (%.1fms)",
+					chunkCount, chunk.Timestamp, serverNow, timeDiff, float64(timeDiff)/1000.0)
 			}
 
 			if p.decoder == nil || p.scheduler == nil {

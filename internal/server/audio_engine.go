@@ -3,6 +3,7 @@
 package server
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"sync"
@@ -282,11 +283,10 @@ func (e *AudioEngine) generateAndSendChunk() {
 
 // encodePCM encodes int16 samples as PCM bytes (little-endian)
 func encodePCM(samples []int16) []byte {
-	// Directly convert int16 slice to bytes (little-endian)
+	// Convert int16 slice to bytes using standard library (little-endian)
 	output := make([]byte, len(samples)*2)
 	for i, sample := range samples {
-		output[i*2] = byte(sample)       // Low byte
-		output[i*2+1] = byte(sample >> 8) // High byte
+		binary.LittleEndian.PutUint16(output[i*2:i*2+2], uint16(sample))
 	}
 	return output
 }

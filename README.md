@@ -5,8 +5,13 @@ A complete Resonate Protocol implementation in Go, featuring both server and pla
 ## Features
 
 ### Server
-- Stream audio files (MP3, FLAC, WAV) or generate test tones
-- Multi-codec support (Opus @ 256kbps, PCM)
+- Stream audio from multiple sources:
+  - Local files (MP3, FLAC)
+  - HTTP/HTTPS streams (direct MP3)
+  - HLS streams (.m3u8 live radio)
+  - Test tone generator (440Hz)
+- Automatic resampling to 48kHz for Opus compatibility
+- Multi-codec support (Opus @ 256kbps, PCM fallback)
 - mDNS service advertisement for automatic discovery
 - Real-time terminal UI showing connected clients
 - WebSocket-based streaming with precise timestamps
@@ -22,18 +27,20 @@ A complete Resonate Protocol implementation in Go, featuring both server and pla
 
 ### Prerequisites
 
-You'll need `pkg-config` and the Opus libraries installed:
+You'll need `pkg-config`, Opus libraries, and optionally `ffmpeg` for HLS streaming:
 
 ```bash
 # macOS
-brew install pkg-config opus opusfile
+brew install pkg-config opus opusfile ffmpeg
 
 # Ubuntu/Debian
-sudo apt-get install pkg-config libopus-dev libopusfile-dev
+sudo apt-get install pkg-config libopus-dev libopusfile-dev ffmpeg
 
 # Fedora
-sudo dnf install pkg-config opus-devel opusfile-devel
+sudo dnf install pkg-config opus-devel opusfile-devel ffmpeg
 ```
+
+**Note:** `ffmpeg` is only required for HLS/m3u8 stream support. Local files and direct HTTP MP3 streams work without it.
 
 ### Build
 
@@ -54,16 +61,29 @@ make player  # Builds resonate-go
 
 ### Server
 
-Start a server with the interactive TUI (default):
+Start a server with the interactive TUI (default, plays 440Hz test tone):
 
 ```bash
 ./resonate-server
 ```
 
-Stream an audio file:
+Stream a local audio file:
 
 ```bash
 ./resonate-server --audio /path/to/music.mp3
+./resonate-server --audio /path/to/album.flac
+```
+
+Stream from HTTP/HTTPS:
+
+```bash
+./resonate-server --audio http://example.com/stream.mp3
+```
+
+Stream HLS/m3u8 (live radio):
+
+```bash
+./resonate-server --audio "https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance"
 ```
 
 Run without TUI (streaming logs to stdout):
@@ -76,7 +96,11 @@ Run without TUI (streaming logs to stdout):
 
 - `--port` - WebSocket server port (default: 8927)
 - `--name` - Server friendly name (default: hostname-resonate-server)
-- `--audio` - Audio file to stream (MP3, FLAC, WAV). If not specified, plays 440Hz test tone
+- `--audio` - Audio source to stream:
+  - Local file path: `/path/to/music.mp3`, `/path/to/audio.flac`
+  - HTTP stream: `http://example.com/stream.mp3`
+  - HLS stream: `https://example.com/live.m3u8`
+  - If not specified, plays 440Hz test tone
 - `--log-file` - Log file path (default: resonate-server.log)
 - `--debug` - Enable debug logging
 - `--no-mdns` - Disable mDNS advertisement (clients must connect manually)
@@ -153,11 +177,12 @@ The player uses a sophisticated scheduling system to ensure perfectly synchroniz
 
 ### Clock Synchronization
 
-Both server and player use NTP-style clock synchronization:
-- Continuous RTT measurement
-- Drift correction
+The player uses a simple, robust clock synchronization system:
+- Calculates server loop origin on first sync
+- Direct time base matching (no drift prediction)
+- Continuous RTT measurement for quality monitoring
 - Microsecond precision timestamps
-- Handles network jitter and delays
+- 500ms startup buffer matches server's lead time
 
 ## Example: Multi-Room Setup
 
