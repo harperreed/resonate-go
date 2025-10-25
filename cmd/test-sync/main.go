@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"time"
 
 	"github.com/Resonate-Protocol/resonate-go/internal/app"
 )
