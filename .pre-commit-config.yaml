@@ -15,19 +15,25 @@ repos:
     rev: v0.5.1
     hooks:
       - id: go-fmt
-      - id: go-vet
       - id: go-imports
       - id: go-mod-tidy
       - id: golangci-lint
         args: ['--timeout=5m']
       - id: go-unit-tests
-        args: ['-race', '-v']
+        args: ['-race', '-v', './...']
 
   - repo: local
     hooks:
-      - id: go-build
-        name: go build
-        entry: make build
+      - id: go-mod-verify
+        name: go mod verify
+        entry: go mod verify
+        language: system
+        files: go\.(mod|sum)$
+        pass_filenames: false
+
+      - id: go-build-all
+        name: go build all binaries
+        entry: bash -c 'go build -v -o resonate-player . && go build -v ./cmd/resonate-server && go build -v ./cmd/test-sync'
         language: system
         files: \.go$
         pass_filenames: false
