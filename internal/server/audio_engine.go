@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	// Audio format constants
-	DefaultSampleRate = 48000
+	// Audio format constants - Hi-Res Audio (192kHz/16-bit)
+	DefaultSampleRate = 192000
 	DefaultChannels   = 2
 	DefaultBitDepth   = 16
 
