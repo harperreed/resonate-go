@@ -109,12 +109,12 @@ func (s *MP3Source) Read(samples []int16) (int, error) {
 	if err == io.EOF {
 		// Loop the audio - seek back to start
 		if _, seekErr := s.file.Seek(0, 0); seekErr != nil {
-			return numSamples, io.EOF
+			return numSamples, fmt.Errorf("failed to seek to start: %w", seekErr)
 		}
 		// Create new decoder
 		newDecoder, decErr := mp3.NewDecoder(s.file)
 		if decErr != nil {
-			return numSamples, io.EOF
+			return numSamples, fmt.Errorf("failed to create new decoder: %w", decErr)
 		}
 		s.decoder = newDecoder
 	}

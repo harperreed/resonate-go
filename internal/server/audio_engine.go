@@ -3,8 +3,6 @@
 package server
 
 import (
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"log"
 	"sync"
@@ -172,14 +170,13 @@ func (e *AudioEngine) RemoveClient(client *Client) {
 	e.clientsMu.Lock()
 	defer e.clientsMu.Unlock()
 
-	// Clean up encoder if it exists (read with lock)
-	client.mu.RLock()
-	opusEncoder := client.OpusEncoder
-	client.mu.RUnlock()
-
-	if opusEncoder != nil {
-		opusEncoder.Close()
+	// Clean up encoder if it exists (with lock held)
+	client.mu.Lock()
+	if client.OpusEncoder != nil {
+		client.OpusEncoder.Close()
+		client.OpusEncoder = nil
 	}
+	client.mu.Unlock()
 
 	delete(e.clients, client.ID)
 	log.Printf("Audio engine: removed client %s", client.Name)
@@ -285,14 +282,11 @@ func (e *AudioEngine) generateAndSendChunk() {
 
 // encodePCM encodes int16 samples as PCM bytes (little-endian)
 func encodePCM(samples []int16) []byte {
-	buf := new(bytes.Buffer)
-
-	for _, sample := range samples {
-		if err := binary.Write(buf, binary.LittleEndian, sample); err != nil {
-			log.Printf("Error encoding PCM sample: %v", err)
-			// Continue encoding remaining samples
-		}
+	// Directly convert int16 slice to bytes (little-endian)
+	output := make([]byte, len(samples)*2)
+	for i, sample := range samples {
+		output[i*2] = byte(sample)       // Low byte
+		output[i*2+1] = byte(sample >> 8) // High byte
 	}
-
-	return buf.Bytes()
+	return output
 }

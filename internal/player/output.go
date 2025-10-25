@@ -3,10 +3,10 @@
 package player
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 
 	"github.com/Resonate-Protocol/resonate-go/internal/audio"
@@ -15,14 +15,16 @@ import (
 
 // Output manages audio output
 type Output struct {
-	ctx     context.Context
-	cancel  context.CancelFunc
-	otoCtx  *oto.Context
-	player  *oto.Player
-	format  audio.Format
-	volume  int
-	muted   bool
-	ready   bool
+	ctx        context.Context
+	cancel     context.CancelFunc
+	otoCtx     *oto.Context
+	player     *oto.Player
+	pipeReader *io.PipeReader
+	pipeWriter *io.PipeWriter
+	format     audio.Format
+	volume     int
+	muted      bool
+	ready      bool
 }
 
 // NewOutput creates an audio output
@@ -58,6 +60,14 @@ func (o *Output) Initialize(format audio.Format) error {
 
 	o.otoCtx = ctx
 	o.format = format
+
+	// Create pipe for continuous streaming
+	o.pipeReader, o.pipeWriter = io.Pipe()
+
+	// Create persistent player that reads from the pipe
+	o.player = o.otoCtx.NewPlayer(o.pipeReader)
+	o.player.Play()
+
 	o.ready = true
 
 	log.Printf("Audio output initialized: %dHz, %d channels",
@@ -72,25 +82,19 @@ func (o *Output) Play(buf audio.Buffer) error {
 		return fmt.Errorf("output not initialized")
 	}
 
-	// Convert bytes to int16 samples
-	samples := make([]int16, len(buf.Samples)/2)
-	for i := 0; i < len(samples); i++ {
-		samples[i] = int16(binary.LittleEndian.Uint16(buf.Samples[i*2:]))
-	}
+	// Apply volume to samples (already in int16 format)
+	samples := applyVolume(buf.Samples, o.volume, o.muted)
 
-	// Apply volume
-	samples = applyVolume(samples, o.volume, o.muted)
-
-	// Convert back to bytes
-	output := make([]byte, len(buf.Samples))
+	// Convert int16 samples to bytes for audio output
+	output := make([]byte, len(samples)*2)
 	for i, sample := range samples {
 		binary.LittleEndian.PutUint16(output[i*2:], uint16(sample))
 	}
 
-	// Write to oto
-	reader := bytes.NewReader(output)
-	player := o.otoCtx.NewPlayer(reader)
-	player.Play()
+	// Write to pipe (which feeds the persistent player)
+	if _, err := o.pipeWriter.Write(output); err != nil {
+		return fmt.Errorf("pipe write failed: %w", err)
+	}
 
 	return nil
 }
@@ -125,6 +129,18 @@ func (o *Output) IsMuted() bool {
 
 // Close closes the audio output
 func (o *Output) Close() {
+	if o.pipeWriter != nil {
+		o.pipeWriter.Close()
+		o.pipeWriter = nil
+	}
+	if o.player != nil {
+		o.player.Close()
+		o.player = nil
+	}
+	if o.pipeReader != nil {
+		o.pipeReader.Close()
+		o.pipeReader = nil
+	}
 	if o.otoCtx != nil {
 		o.otoCtx.Suspend()
 		o.ready = false

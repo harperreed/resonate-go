@@ -14,12 +14,14 @@ import (
 
 // Scheduler manages playback timing
 type Scheduler struct {
-	clockSync  *sync.ClockSync
-	bufferQ    *BufferQueue
-	output     chan audio.Buffer
-	jitterMs   int
-	ctx        context.Context
-	cancel     context.CancelFunc
+	clockSync    *sync.ClockSync
+	bufferQ      *BufferQueue
+	output       chan audio.Buffer
+	jitterMs     int
+	ctx          context.Context
+	cancel       context.CancelFunc
+	buffering    bool
+	bufferTarget int // Number of chunks to buffer before starting playback
 
 	stats SchedulerStats
 }
@@ -35,13 +37,19 @@ type SchedulerStats struct {
 func NewScheduler(clockSync *sync.ClockSync, jitterMs int) *Scheduler {
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Buffer 10 chunks (200ms at 20ms/chunk) before starting playback
+	// This prevents startup ticks and provides smooth playback start
+	bufferTarget := 10
+
 	return &Scheduler{
-		clockSync: clockSync,
-		bufferQ:   NewBufferQueue(),
-		output:    make(chan audio.Buffer, 10),
-		jitterMs:  jitterMs,
-		ctx:       ctx,
-		cancel:    cancel,
+		clockSync:    clockSync,
+		bufferQ:      NewBufferQueue(),
+		output:       make(chan audio.Buffer, 10),
+		jitterMs:     jitterMs,
+		ctx:          ctx,
+		cancel:       cancel,
+		buffering:    true,
+		bufferTarget: bufferTarget,
 	}
 }
 
@@ -81,6 +89,17 @@ func (s *Scheduler) Run() {
 
 // processQueue checks for buffers ready to play
 func (s *Scheduler) processQueue() {
+	// Check if we're still buffering at startup
+	if s.buffering {
+		if s.bufferQ.Len() >= s.bufferTarget {
+			log.Printf("Startup buffering complete: %d chunks ready", s.bufferQ.Len())
+			s.buffering = false
+		} else {
+			// Still buffering, don't start playback yet
+			return
+		}
+	}
+
 	now := time.Now()
 
 	for s.bufferQ.Len() > 0 {

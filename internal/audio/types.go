@@ -17,6 +17,6 @@ type Format struct {
 type Buffer struct {
 	Timestamp  int64     // Server timestamp (microseconds)
 	PlayAt     time.Time // Local play time
-	Samples    []byte    // PCM samples
+	Samples    []int16   // PCM samples (int16 format to avoid conversions)
 	Format     Format
 }

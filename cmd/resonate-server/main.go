@@ -27,7 +27,7 @@ func main() {
 	flag.Parse()
 
 	// Set up logging (both file and console)
-	f, err := os.OpenFile(*logFile, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	f, err := os.OpenFile(*logFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatalf("error opening log file: %v", err)
 	}
@@ -71,8 +71,9 @@ func main() {
 
 	go func() {
 		sig := <-sigChan
-		log.Printf("\nReceived %v signal, shutting down gracefully...", sig)
+		log.Printf("\n\n=== Received %v signal, shutting down gracefully... ===\n", sig)
 		srv.Stop()
+		log.Printf("Stop() called, waiting for cleanup...")
 	}()
 
 	// Start server

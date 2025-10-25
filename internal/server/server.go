@@ -101,7 +101,21 @@ func New(config Config) *Server {
 		mux:        mux,
 		upgrader: websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
-				return true // Allow all origins for now
+				// TODO: For production deployment, implement proper origin validation
+				// Currently allows all origins for local network deployments
+				// This server is designed for trusted local networks only
+				origin := r.Header.Get("Origin")
+				if origin == "" {
+					// Allow non-browser clients (no Origin header)
+					return true
+				}
+				// Accept localhost origins for development
+				if origin == "http://localhost" || origin == "http://127.0.0.1" {
+					return true
+				}
+				// For production: implement allowlist-based validation
+				log.Printf("Warning: accepting WebSocket from origin: %s", origin)
+				return true
 			},
 		},
 		clients:    make(map[string]*Client),
@@ -164,12 +178,14 @@ func (s *Server) Start() error {
 	}()
 
 	// Wait for stop signal or server error
+	var serverErr error
 	select {
 	case <-s.stopChan:
 		log.Printf("Server shutting down...")
 	case err := <-errChan:
 		log.Printf("HTTP server error: %v", err)
-		return err
+		serverErr = err
+		// Fall through to cleanup
 	}
 
 	// Mark server as shutting down to reject new connections
@@ -196,6 +212,10 @@ func (s *Server) Start() error {
 	s.wg.Wait()
 	log.Printf("Server stopped cleanly")
 
+	// Return server error if one occurred
+	if serverErr != nil {
+		return fmt.Errorf("HTTP server failed: %w", serverErr)
+	}
 	return nil
 }
 
@@ -280,15 +300,7 @@ func (s *Server) handleConnection(conn *websocket.Conn) {
 
 	log.Printf("Client hello: %s (ID: %s, Roles: %v)", hello.Name, hello.ClientID, hello.SupportedRoles)
 
-	// Check for duplicate client ID before creating client
-	s.clientsMu.Lock()
-	if existingClient, exists := s.clients[hello.ClientID]; exists {
-		s.clientsMu.Unlock()
-		log.Printf("Client ID %s already connected (name: %s), rejecting duplicate", hello.ClientID, existingClient.Name)
-		return
-	}
-
-	// Create client
+	// Create client before acquiring lock
 	client := &Client{
 		ID:           hello.ClientID,
 		Name:         hello.Name,
@@ -301,7 +313,27 @@ func (s *Server) handleConnection(conn *websocket.Conn) {
 		sendChan:     make(chan interface{}, 100),
 	}
 
-	// Register client (already holding lock)
+	// Check for duplicate client ID and register atomically
+	s.clientsMu.Lock()
+	if existingClient, exists := s.clients[hello.ClientID]; exists {
+		s.clientsMu.Unlock()
+		log.Printf("Client ID %s already connected (name: %s), rejecting duplicate", hello.ClientID, existingClient.Name)
+
+		// Send error message to client
+		errorMsg := protocol.Message{
+			Type: "server/error",
+			Payload: map[string]string{
+				"error":   "duplicate_client_id",
+				"message": "Client ID already connected",
+			},
+		}
+		if data, err := json.Marshal(errorMsg); err == nil {
+			conn.WriteMessage(websocket.TextMessage, data)
+		}
+		return
+	}
+
+	// Register client
 	s.clients[client.ID] = client
 	s.clientsMu.Unlock()
 
@@ -434,7 +466,11 @@ func (s *Server) handleTimeSync(client *Client, payload interface{}) {
 		return
 	}
 
-	// Capture transmit time as late as possible (before send)
+	// Capture transmit time before queueing message
+	// Note: This timestamp represents the queue time, not the actual wire time.
+	// The message is queued to sendChan and transmitted asynchronously by clientWriter.
+	// For more accurate timing, the timestamp would need to be captured immediately
+	// before the actual WebSocket write operation.
 	serverSend := s.getClockMicros()
 
 	if s.config.Debug {

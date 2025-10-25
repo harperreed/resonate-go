@@ -26,8 +26,9 @@ func NewOpusEncoder(sampleRate, channels, frameSize int) (*OpusEncoder, error) {
 		return nil, fmt.Errorf("failed to create opus encoder: %w", err)
 	}
 
-	// Set bitrate (128 kbps for stereo, 64 kbps for mono)
-	bitrate := 64000 * channels
+	// Set bitrate (256 kbps for stereo, 128 kbps for mono)
+	// Higher bitrate for better quality, especially for music/tones
+	bitrate := 128000 * channels
 	if err := encoder.SetBitrate(bitrate); err != nil {
 		log.Printf("Warning: Failed to set Opus bitrate: %v", err)
 	}
