@@ -105,10 +105,27 @@ type StreamMetadata struct {
 	ArtworkURL string `json:"artwork_url,omitempty"`
 }
 
+// SessionMetadata contains track metadata within session updates
+type SessionMetadata struct {
+	Title         string  `json:"title,omitempty"`
+	Artist        string  `json:"artist,omitempty"`
+	Album         string  `json:"album,omitempty"`
+	AlbumArtist   string  `json:"album_artist,omitempty"`
+	ArtworkURL    string  `json:"artwork_url,omitempty"`
+	Track         int     `json:"track,omitempty"`
+	TrackDuration int     `json:"track_duration,omitempty"`
+	Year          int     `json:"year,omitempty"`
+	PlaybackSpeed float64 `json:"playback_speed,omitempty"`
+	Repeat        string  `json:"repeat,omitempty"`
+	Shuffle       bool    `json:"shuffle,omitempty"`
+	Timestamp     int64   `json:"timestamp,omitempty"`
+}
+
 // SessionUpdate notifies client of session state changes
 type SessionUpdate struct {
-	GroupID       string `json:"group_id"`
-	PlaybackState string `json:"playback_state,omitempty"` // "playing" or "idle"
+	GroupID       string           `json:"group_id"`
+	PlaybackState string           `json:"playback_state,omitempty"` // "playing" or "idle"
+	Metadata      *SessionMetadata `json:"metadata,omitempty"`
 }
 
 // ClientTime is sent for clock synchronization

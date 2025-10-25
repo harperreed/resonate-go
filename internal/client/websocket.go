@@ -35,11 +35,12 @@ type Client struct {
 	mu     sync.RWMutex
 
 	// Message channels
-	AudioChunks  chan AudioChunk
-	ControlMsgs  chan protocol.ServerCommand
-	TimeSyncResp chan protocol.ServerTime
-	StreamStart  chan protocol.StreamStart
-	Metadata     chan protocol.StreamMetadata
+	AudioChunks   chan AudioChunk
+	ControlMsgs   chan protocol.ServerCommand
+	TimeSyncResp  chan protocol.ServerTime
+	StreamStart   chan protocol.StreamStart
+	Metadata      chan protocol.StreamMetadata
+	SessionUpdate chan protocol.SessionUpdate
 
 	// State
 	connected bool
@@ -58,14 +59,15 @@ func NewClient(config Config) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Client{
-		config:       config,
-		AudioChunks:  make(chan AudioChunk, 100),
-		ControlMsgs:  make(chan protocol.ServerCommand, 10),
-		TimeSyncResp: make(chan protocol.ServerTime, 10),
-		StreamStart:  make(chan protocol.StreamStart, 1),
-		Metadata:     make(chan protocol.StreamMetadata, 10),
-		ctx:          ctx,
-		cancel:       cancel,
+		config:        config,
+		AudioChunks:   make(chan AudioChunk, 100),
+		ControlMsgs:   make(chan protocol.ServerCommand, 10),
+		TimeSyncResp:  make(chan protocol.ServerTime, 10),
+		StreamStart:   make(chan protocol.StreamStart, 1),
+		Metadata:      make(chan protocol.StreamMetadata, 10),
+		SessionUpdate: make(chan protocol.SessionUpdate, 10),
+		ctx:           ctx,
+		cancel:        cancel,
 	}
 }
 
@@ -273,10 +275,20 @@ func (c *Client) handleJSONMessage(data []byte) {
 
 	case "session/update":
 		var update protocol.SessionUpdate
-		json.Unmarshal(payloadBytes, &update)
+		if err := json.Unmarshal(payloadBytes, &update); err != nil {
+			log.Printf("Failed to parse session/update: %v", err)
+			return
+		}
 		log.Printf("Session update: group=%s, state=%s", update.GroupID, update.PlaybackState)
-		log.Printf("Full session/update payload: %s", string(payloadBytes))
-		// For now, just log it - we could use this to update player state
+		if update.Metadata != nil {
+			log.Printf("Metadata: %s - %s (%s)", update.Metadata.Artist, update.Metadata.Title, update.Metadata.Album)
+		}
+		// Send to channel for player to handle
+		select {
+		case c.SessionUpdate <- update:
+		case <-time.After(100 * time.Millisecond):
+			log.Printf("Session update channel full, dropping message")
+		}
 
 	default:
 		log.Printf("Unknown message type: %s", msg.Type)

@@ -202,6 +202,7 @@ func (p *Player) connect(serverAddr string) error {
 	go p.handleControls()
 	go p.handleStreamStart()
 	go p.handleMetadata()
+	go p.handleSessionUpdates()
 	go p.clockSyncLoop()
 	go p.statsUpdateLoop()
 
@@ -422,6 +423,29 @@ func (p *Player) handleMetadata() {
 				Artist: meta.Artist,
 				Album:  meta.Album,
 			})
+
+		case <-p.ctx.Done():
+			return
+		}
+	}
+}
+
+// handleSessionUpdates processes session updates and extracts metadata
+func (p *Player) handleSessionUpdates() {
+	for {
+		select {
+		case update := <-p.client.SessionUpdate:
+			if update.Metadata != nil {
+				log.Printf("Session metadata: %s - %s (%s)",
+					update.Metadata.Artist, update.Metadata.Title, update.Metadata.Album)
+
+				// Update TUI with metadata from session
+				p.updateTUI(ui.StatusMsg{
+					Title:  update.Metadata.Title,
+					Artist: update.Metadata.Artist,
+					Album:  update.Metadata.Album,
+				})
+			}
 
 		case <-p.ctx.Done():
 			return
