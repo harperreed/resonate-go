@@ -25,3 +25,5 @@ resonate-server
 # OS
 .DS_Store
 Thumbs.db
+output.txt
+resonate-go
