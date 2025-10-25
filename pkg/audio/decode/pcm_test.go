@@ -104,3 +104,73 @@ func TestPCMDecode24Bit(t *testing.T) {
 		t.Errorf("expected second sample %d, got %d", expected1, output[1])
 	}
 }
+
+func TestNewPCM_InvalidCodec(t *testing.T) {
+	format := audio.Format{
+		Codec:      "opus",
+		SampleRate: 48000,
+		Channels:   2,
+		BitDepth:   16,
+	}
+
+	decoder, err := NewPCM(format)
+	if err == nil {
+		t.Fatal("expected error for invalid codec, got nil")
+	}
+
+	if decoder != nil {
+		t.Fatal("expected decoder to be nil for invalid codec")
+	}
+
+	expectedError := "invalid codec for PCM decoder: opus"
+	if err.Error() != expectedError {
+		t.Errorf("expected error %q, got %q", expectedError, err.Error())
+	}
+}
+
+func TestNewPCM_UnsupportedBitDepth(t *testing.T) {
+	format := audio.Format{
+		Codec:      "pcm",
+		SampleRate: 48000,
+		Channels:   2,
+		BitDepth:   32,
+	}
+
+	decoder, err := NewPCM(format)
+	if err == nil {
+		t.Fatal("expected error for unsupported bit depth, got nil")
+	}
+
+	if decoder != nil {
+		t.Fatal("expected decoder to be nil for unsupported bit depth")
+	}
+
+	expectedError := "unsupported bit depth: 32 (supported: 16, 24)"
+	if err.Error() != expectedError {
+		t.Errorf("expected error %q, got %q", expectedError, err.Error())
+	}
+}
+
+func TestPCMDecode_EmptyInput(t *testing.T) {
+	format := audio.Format{
+		Codec:      "pcm",
+		SampleRate: 48000,
+		Channels:   2,
+		BitDepth:   16,
+	}
+
+	decoder, err := NewPCM(format)
+	if err != nil {
+		t.Fatalf("failed to create decoder: %v", err)
+	}
+
+	// Test with empty byte slice
+	output, err := decoder.Decode([]byte{})
+	if err != nil {
+		t.Fatalf("decode failed with empty input: %v", err)
+	}
+
+	if len(output) != 0 {
+		t.Errorf("expected 0 samples from empty input, got %d", len(output))
+	}
+}
