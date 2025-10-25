@@ -3,7 +3,6 @@
 package server
 
 import (
-	"encoding/binary"
 	"fmt"
 	"log"
 	"sync"
@@ -13,10 +12,10 @@ import (
 )
 
 const (
-	// Audio format constants - Hi-Res Audio (192kHz/16-bit)
+	// Audio format constants - Hi-Res Audio (192kHz/24-bit)
 	DefaultSampleRate = 192000
 	DefaultChannels   = 2
-	DefaultBitDepth   = 16
+	DefaultBitDepth   = 24
 
 	// Chunk timing
 	ChunkDurationMs = 20 // 20ms chunks
@@ -123,7 +122,8 @@ func (e *AudioEngine) AddClient(client *Client) {
 
 	e.clients[client.ID] = client
 
-	log.Printf("Audio engine: added client %s with codec %s", client.Name, codec)
+	log.Printf("Audio engine: added client %s with codec %s (format: %dHz/%dbit/%dch)",
+		client.Name, codec, e.source.SampleRate(), DefaultBitDepth, e.source.Channels())
 
 	// Send stream/start message (use select to avoid blocking)
 	streamStart := protocol.StreamStart{
@@ -184,25 +184,29 @@ func (e *AudioEngine) RemoveClient(client *Client) {
 }
 
 // negotiateCodec selects the best codec based on client capabilities
+// Prioritizes PCM at native sample rate for hi-res audio
 func (e *AudioEngine) negotiateCodec(client *Client) string {
 	// If client has no capabilities, default to PCM
 	if client.Capabilities == nil {
 		return "pcm"
 	}
 
-	// Check legacy support_codecs array (Music Assistant compatibility)
-	for _, codec := range client.Capabilities.SupportCodecs {
-		if codec == "opus" {
-			return "opus"
-		}
-		if codec == "flac" {
-			return "flac"
+	sourceRate := e.source.SampleRate()
+
+	// Check newer support_formats array first (spec-compliant)
+	// Prioritize PCM at native rate to preserve hi-res audio quality
+	for _, format := range client.Capabilities.SupportFormats {
+		// Check if client supports PCM at our native sample rate
+		if format.Codec == "pcm" && format.SampleRate == sourceRate && format.BitDepth == DefaultBitDepth {
+			return "pcm"
 		}
 	}
 
-	// Check newer support_formats array (spec-compliant)
+	// If no PCM match at native rate, consider compressed codecs
 	for _, format := range client.Capabilities.SupportFormats {
-		if format.Codec == "opus" {
+		// Only use Opus if source is 48kHz (Opus native rate)
+		// For other rates, prefer PCM to avoid resampling
+		if format.Codec == "opus" && sourceRate == 48000 {
 			return "opus"
 		}
 		if format.Codec == "flac" {
@@ -210,7 +214,18 @@ func (e *AudioEngine) negotiateCodec(client *Client) string {
 		}
 	}
 
-	// Default to PCM if no compressed codec supported
+	// Check legacy support_codecs array (Music Assistant compatibility)
+	for _, codec := range client.Capabilities.SupportCodecs {
+		if codec == "opus" && sourceRate == 48000 {
+			return "opus"
+		}
+		if codec == "flac" {
+			return "flac"
+		}
+	}
+
+	// Default to PCM even if sample rate doesn't match perfectly
+	// Client will handle resampling on their end if needed
 	return "pcm"
 }
 
@@ -224,18 +239,16 @@ func (e *AudioEngine) generateAndSendChunk() {
 	chunkSamples := (e.source.SampleRate() * ChunkDurationMs) / 1000
 	totalSamples := chunkSamples * e.source.Channels()
 
-	// Read audio samples from source
-	samples := make([]int16, totalSamples)
+	// Read audio samples from source (int32 for 24-bit support)
+	samples := make([]int32, totalSamples)
 	n, err := e.source.Read(samples)
 	if err != nil {
 		log.Printf("Error reading audio source: %v", err)
 		return
 	}
 
-	if e.server.config.Debug && n > 0 {
-		log.Printf("[DEBUG] Generating chunk: server_time=%d, playback_time=%d, samples_read=%d",
-			currentTime, playbackTime, n)
-	}
+	// Note: Chunk generation happens every 20ms (50/sec), logging disabled to avoid spam
+	// Debug info: server generates chunks of size=7680 samples (20ms @ 192kHz stereo)
 
 	// Send to all clients (encode per-client based on codec)
 	e.clientsMu.RLock()
@@ -255,7 +268,9 @@ func (e *AudioEngine) generateAndSendChunk() {
 		switch codec {
 		case "opus":
 			if opusEncoder != nil {
-				audioData, encodeErr = opusEncoder.Encode(samples[:n])
+				// Convert int32 to int16 for Opus (Opus only supports 16-bit)
+				samples16 := convertToInt16(samples[:n])
+				audioData, encodeErr = opusEncoder.Encode(samples16)
 				if encodeErr != nil {
 					log.Printf("Opus encode error for %s: %v", client.Name, encodeErr)
 					continue
@@ -281,12 +296,25 @@ func (e *AudioEngine) generateAndSendChunk() {
 	}
 }
 
-// encodePCM encodes int16 samples as PCM bytes (little-endian)
-func encodePCM(samples []int16) []byte {
-	// Convert int16 slice to bytes using standard library (little-endian)
-	output := make([]byte, len(samples)*2)
+// convertToInt16 converts int32 samples to int16 (for Opus encoding)
+func convertToInt16(samples []int32) []int16 {
+	result := make([]int16, len(samples))
+	for i, s := range samples {
+		// Right-shift 8 bits to convert from 24-bit to 16-bit range
+		result[i] = int16(s >> 8)
+	}
+	return result
+}
+
+// encodePCM encodes int32 samples as 24-bit PCM bytes (little-endian, 3 bytes per sample)
+func encodePCM(samples []int32) []byte {
+	// 24-bit PCM: 3 bytes per sample
+	output := make([]byte, len(samples)*3)
 	for i, sample := range samples {
-		binary.LittleEndian.PutUint16(output[i*2:i*2+2], uint16(sample))
+		// Pack 24-bit value (little-endian)
+		output[i*3] = byte(sample)
+		output[i*3+1] = byte(sample >> 8)
+		output[i*3+2] = byte(sample >> 16)
 	}
 	return output
 }

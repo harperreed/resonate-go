@@ -12,7 +12,7 @@ import (
 
 // Decoder decodes audio in various formats
 type Decoder interface {
-	Decode(data []byte) ([]int16, error)
+	Decode(data []byte) ([]int32, error)
 	Close() error
 }
 
@@ -20,7 +20,7 @@ type Decoder interface {
 func NewDecoder(format Format) (Decoder, error) {
 	switch format.Codec {
 	case "pcm":
-		return &PCMDecoder{}, nil
+		return &PCMDecoder{bitDepth: format.BitDepth}, nil
 	case "opus":
 		return NewOpusDecoder(format)
 	case "flac":
@@ -30,16 +30,31 @@ func NewDecoder(format Format) (Decoder, error) {
 	}
 }
 
-// PCMDecoder is a pass-through for raw PCM
-type PCMDecoder struct{}
+// PCMDecoder decodes raw PCM (16-bit or 24-bit)
+type PCMDecoder struct {
+	bitDepth int
+}
 
-func (d *PCMDecoder) Decode(data []byte) ([]int16, error) {
-	// Convert bytes to int16 samples
-	samples := make([]int16, len(data)/2)
-	for i := 0; i < len(samples); i++ {
-		samples[i] = int16(binary.LittleEndian.Uint16(data[i*2:]))
+func (d *PCMDecoder) Decode(data []byte) ([]int32, error) {
+	if d.bitDepth == 24 {
+		// 24-bit PCM: 3 bytes per sample
+		numSamples := len(data) / 3
+		samples := make([]int32, numSamples)
+		for i := 0; i < numSamples; i++ {
+			b := [3]byte{data[i*3], data[i*3+1], data[i*3+2]}
+			samples[i] = SampleFrom24Bit(b)
+		}
+		return samples, nil
+	} else {
+		// 16-bit PCM: 2 bytes per sample (default)
+		numSamples := len(data) / 2
+		samples := make([]int32, numSamples)
+		for i := 0; i < numSamples; i++ {
+			sample16 := int16(binary.LittleEndian.Uint16(data[i*2:]))
+			samples[i] = SampleFromInt16(sample16)
+		}
+		return samples, nil
 	}
-	return samples, nil
 }
 
 func (d *PCMDecoder) Close() error {
@@ -64,19 +79,23 @@ func NewOpusDecoder(format Format) (*OpusDecoder, error) {
 	}, nil
 }
 
-func (d *OpusDecoder) Decode(data []byte) ([]int16, error) {
+func (d *OpusDecoder) Decode(data []byte) ([]int32, error) {
 	// Opus decoder outputs to int16 buffer
 	pcmSize := 5760 * d.format.Channels // Max frame size
-	pcm := make([]int16, pcmSize)
+	pcm16 := make([]int16, pcmSize)
 
-	n, err := d.decoder.Decode(data, pcm)
+	n, err := d.decoder.Decode(data, pcm16)
 	if err != nil {
 		return nil, fmt.Errorf("opus decode failed: %w", err)
 	}
 
-	// Return the actual decoded samples (n is samples per channel)
+	// Convert int16 to int32 (Opus is always 16-bit)
 	actualSamples := n * d.format.Channels
-	return pcm[:actualSamples], nil
+	pcm32 := make([]int32, actualSamples)
+	for i := 0; i < actualSamples; i++ {
+		pcm32[i] = SampleFromInt16(pcm16[i])
+	}
+	return pcm32, nil
 }
 
 func (d *OpusDecoder) Close() error {
@@ -96,7 +115,7 @@ func NewFLACDecoder(format Format) (*FLACDecoder, error) {
 	}, nil
 }
 
-func (d *FLACDecoder) Decode(data []byte) ([]int16, error) {
+func (d *FLACDecoder) Decode(data []byte) ([]int32, error) {
 	// For streaming FLAC, we need to handle frame-by-frame decoding
 	// This is a simplified implementation
 	// In production, would use mewkiz/flac's streaming API

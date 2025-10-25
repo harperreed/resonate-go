@@ -50,13 +50,15 @@ func TestPCMDecoder(t *testing.T) {
 		t.Errorf("expected %d samples, got %d", expectedSamples, len(output))
 	}
 
-	// Verify little-endian conversion
-	// 0x00, 0x01 -> 0x0100 = 256
-	// 0x02, 0x03 -> 0x0302 = 770
-	if output[0] != 256 {
-		t.Errorf("expected first sample 256, got %d", output[0])
+	// Verify little-endian conversion with 24-bit scaling
+	// 0x00, 0x01 -> 0x0100 = 256 (16-bit) -> 256<<8 = 65536 (24-bit)
+	// 0x02, 0x03 -> 0x0302 = 770 (16-bit) -> 770<<8 = 197120 (24-bit)
+	expected0 := int32(256 << 8)
+	if output[0] != expected0 {
+		t.Errorf("expected first sample %d, got %d", expected0, output[0])
 	}
-	if output[1] != 770 {
-		t.Errorf("expected second sample 770, got %d", output[1])
+	expected1 := int32(770 << 8)
+	if output[1] != expected1 {
+		t.Errorf("expected second sample %d, got %d", expected1, output[1])
 	}
 }

@@ -93,12 +93,19 @@ func (o *Output) Play(buf audio.Buffer) error {
 		return fmt.Errorf("output not initialized")
 	}
 
-	// Apply volume to samples (already in int16 format)
+	// Apply volume to samples (int32 format)
 	samples := applyVolume(buf.Samples, o.volume, o.muted)
 
+	// Convert int32 samples to int16 for PortAudio (oto uses 16-bit output)
+	// TODO: Add native 24-bit PortAudio support in the future
+	samples16 := make([]int16, len(samples))
+	for i, s := range samples {
+		samples16[i] = audio.SampleToInt16(s)
+	}
+
 	// Convert int16 samples to bytes for audio output
-	output := make([]byte, len(samples)*2)
-	for i, sample := range samples {
+	output := make([]byte, len(samples16)*2)
+	for i, sample := range samples16 {
 		binary.LittleEndian.PutUint16(output[i*2:], uint16(sample))
 	}
 
@@ -159,13 +166,22 @@ func (o *Output) Close() {
 	o.cancel()
 }
 
-// applyVolume applies volume and mute to samples
-func applyVolume(samples []int16, volume int, muted bool) []int16 {
+// applyVolume applies volume and mute to samples with clipping protection
+func applyVolume(samples []int32, volume int, muted bool) []int32 {
 	multiplier := getVolumeMultiplier(volume, muted)
 
-	result := make([]int16, len(samples))
+	result := make([]int32, len(samples))
 	for i, sample := range samples {
-		result[i] = int16(float64(sample) * multiplier)
+		scaled := int64(float64(sample) * multiplier)
+
+		// Clamp to 24-bit range to prevent overflow
+		if scaled > audio.Max24Bit {
+			scaled = audio.Max24Bit
+		} else if scaled < audio.Min24Bit {
+			scaled = audio.Min24Bit
+		}
+
+		result[i] = int32(scaled)
 	}
 
 	return result

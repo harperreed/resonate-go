@@ -9,7 +9,7 @@ type Resampler struct {
 	channels   int
 	ratio      float64
 	position   float64
-	lastSample []int16 // one sample per channel
+	lastSample []int32 // one sample per channel
 }
 
 // NewResampler creates a new resampler
@@ -20,14 +20,14 @@ func NewResampler(inputRate, outputRate, channels int) *Resampler {
 		channels:   channels,
 		ratio:      float64(inputRate) / float64(outputRate),
 		position:   0.0,
-		lastSample: make([]int16, channels),
+		lastSample: make([]int32, channels),
 	}
 }
 
 // Resample converts input samples to output sample rate using linear interpolation
 // input: interleaved samples at inputRate
 // output: interleaved samples at outputRate
-func (r *Resampler) Resample(input []int16, output []int16) int {
+func (r *Resampler) Resample(input []int32, output []int32) int {
 	if len(input) == 0 {
 		return 0
 	}
@@ -57,7 +57,7 @@ func (r *Resampler) Resample(input []int16, output []int16) int {
 
 			// Linear interpolation
 			interpolated := float64(sample1)*(1.0-frac) + float64(sample2)*frac
-			output[outIdx*r.channels+ch] = int16(interpolated)
+			output[outIdx*r.channels+ch] = int32(interpolated)
 		}
 
 		outIdx++

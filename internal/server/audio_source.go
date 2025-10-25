@@ -20,8 +20,8 @@ import (
 
 // AudioSource provides PCM audio samples
 type AudioSource interface {
-	// Read reads PCM samples into the buffer. Returns number of samples read or error.
-	Read(samples []int16) (int, error)
+	// Read reads PCM samples into the buffer (int32 for 24-bit support). Returns number of samples read or error.
+	Read(samples []int32) (int, error)
 	// SampleRate returns the sample rate of the audio
 	SampleRate() int
 	// Channels returns the number of channels
@@ -42,7 +42,6 @@ func NewAudioSource(pathOrURL string) (AudioSource, error) {
 
 	var source AudioSource
 	var err error
-	var displayName string
 
 	// Check if it's an HTTP(S) URL
 	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
@@ -60,7 +59,6 @@ func NewAudioSource(pathOrURL string) (AudioSource, error) {
 				return nil, err
 			}
 		}
-		displayName = pathOrURL
 	} else {
 		// Local file
 		// Check file exists
@@ -85,15 +83,11 @@ func NewAudioSource(pathOrURL string) (AudioSource, error) {
 		default:
 			return nil, fmt.Errorf("unsupported audio format: %s (supported: .mp3, .flac)", ext)
 		}
-		displayName = filepath.Base(pathOrURL)
 	}
 
-	// If source is not 48kHz, wrap with resampler for Opus compatibility
-	if source.SampleRate() != 48000 {
-		log.Printf("Resampling %s from %d Hz to 48000 Hz for Opus compatibility",
-			displayName, source.SampleRate())
-		return NewResampledSource(source, 48000), nil
-	}
+	// Note: We no longer auto-resample here. Sources are kept at native sample rate.
+	// If Opus encoding is needed and source isn't 48kHz, resampling happens per-client in audio engine.
+	// This allows PCM clients to receive hi-res audio at native rates!
 
 	return source, nil
 }
@@ -139,9 +133,9 @@ func NewMP3Source(filePath string) (*MP3Source, error) {
 	}, nil
 }
 
-func (s *MP3Source) Read(samples []int16) (int, error) {
-	// Read bytes from decoder
-	numBytes := len(samples) * 2 // int16 = 2 bytes
+func (s *MP3Source) Read(samples []int32) (int, error) {
+	// Read bytes from decoder (MP3 decoder outputs int16 = 2 bytes per sample)
+	numBytes := len(samples) * 2
 	buf := make([]byte, numBytes)
 
 	n, err := s.decoder.Read(buf)
@@ -149,10 +143,13 @@ func (s *MP3Source) Read(samples []int16) (int, error) {
 		return 0, err
 	}
 
-	// Convert bytes to int16 samples using standard library (little-endian)
+	// Convert bytes to int16, then scale to 24-bit range
 	numSamples := n / 2
 	for i := 0; i < numSamples; i++ {
-		samples[i] = int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
+		sample16 := int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
+		// Left-shift by 8 to convert 16-bit range to 24-bit range
+		// Example: 32767 (max 16-bit) << 8 = 8388352 (near max 24-bit 8388607)
+		samples[i] = int32(sample16) << 8
 	}
 
 	if err == io.EOF {
@@ -230,7 +227,7 @@ func NewFLACSource(filePath string) (*FLACSource, error) {
 	}, nil
 }
 
-func (s *FLACSource) Read(samples []int16) (int, error) {
+func (s *FLACSource) Read(samples []int32) (int, error) {
 	framesNeeded := len(samples) / s.channels
 	samplesRead := 0
 
@@ -254,23 +251,27 @@ func (s *FLACSource) Read(samples []int16) (int, error) {
 			return samplesRead, err
 		}
 
-		// Convert frame samples to int16
+		// Convert frame samples to int32 24-bit range
 		// FLAC samples are typically 16 or 24 bit, stored as int32
 		for i := 0; i < int(frame.BlockSize) && samplesRead < len(samples); i++ {
 			for ch := 0; ch < s.channels && samplesRead < len(samples); ch++ {
 				sample := frame.Subframes[ch].Samples[i]
 
-				// Convert to int16 range
+				// Convert to int32 24-bit range
 				// FLAC stores samples as signed integers with the specified bit depth
 				if s.bitDepth == 16 {
-					samples[samplesRead] = int16(sample)
+					// Convert 16-bit to 24-bit range
+					samples[samplesRead] = sample << 8
+				} else if s.bitDepth == 24 {
+					// Already 24-bit, use directly
+					samples[samplesRead] = sample
 				} else {
-					// For other bit depths, scale to 16-bit range
-					shift := s.bitDepth - 16
+					// For other bit depths, scale to 24-bit range
+					shift := s.bitDepth - 24
 					if shift > 0 {
-						samples[samplesRead] = int16(sample >> shift)
+						samples[samplesRead] = sample >> shift
 					} else {
-						samples[samplesRead] = int16(sample << -shift)
+						samples[samplesRead] = sample << -shift
 					}
 				}
 				samplesRead++
@@ -332,7 +333,7 @@ func NewHTTPMP3Source(url string) (*HTTPMP3Source, error) {
 	}, nil
 }
 
-func (s *HTTPMP3Source) Read(samples []int16) (int, error) {
+func (s *HTTPMP3Source) Read(samples []int32) (int, error) {
 	// Read bytes from decoder
 	numBytes := len(samples) * 2 // int16 = 2 bytes
 	buf := make([]byte, numBytes)
@@ -342,10 +343,12 @@ func (s *HTTPMP3Source) Read(samples []int16) (int, error) {
 		return 0, err // Don't loop HTTP streams, just end on EOF
 	}
 
-	// Convert bytes to int16 samples using standard library (little-endian)
+	// Convert bytes to int16, then scale to 24-bit range
 	numSamples := n / 2
 	for i := 0; i < numSamples; i++ {
-		samples[i] = int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
+		sample16 := int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
+		// Left-shift by 8 to convert 16-bit range to 24-bit range
+		samples[i] = int32(sample16) << 8
 	}
 
 	return numSamples, nil
@@ -425,7 +428,7 @@ func NewFFmpegSource(url string) (*FFmpegSource, error) {
 	}, nil
 }
 
-func (s *FFmpegSource) Read(samples []int16) (int, error) {
+func (s *FFmpegSource) Read(samples []int32) (int, error) {
 	// Read raw PCM bytes from ffmpeg stdout
 	numBytes := len(samples) * 2 // int16 = 2 bytes
 	buf := make([]byte, numBytes)
@@ -435,10 +438,12 @@ func (s *FFmpegSource) Read(samples []int16) (int, error) {
 		return 0, err
 	}
 
-	// Convert bytes to int16 samples using standard library (little-endian)
+	// Convert bytes to int16, then scale to 24-bit range
 	numSamples := n / 2
 	for i := 0; i < numSamples; i++ {
-		samples[i] = int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
+		sample16 := int16(binary.LittleEndian.Uint16(buf[i*2 : i*2+2]))
+		// Left-shift by 8 to convert 16-bit range to 24-bit range
+		samples[i] = int32(sample16) << 8
 	}
 
 	return numSamples, nil
@@ -465,8 +470,8 @@ type ResampledSource struct {
 	source       AudioSource
 	resampler    *Resampler
 	targetRate   int
-	inputBuffer  []int16
-	outputBuffer []int16
+	inputBuffer  []int32
+	outputBuffer []int32
 }
 
 // NewResampledSource creates a resampling wrapper around an audio source
@@ -482,12 +487,12 @@ func NewResampledSource(source AudioSource, targetRate int) *ResampledSource {
 		source:       source,
 		resampler:    NewResampler(inputRate, targetRate, channels),
 		targetRate:   targetRate,
-		inputBuffer:  make([]int16, inputSamples),
-		outputBuffer: make([]int16, outputSamples*2), // Extra space for safety
+		inputBuffer:  make([]int32, inputSamples),
+		outputBuffer: make([]int32, outputSamples*2), // Extra space for safety
 	}
 }
 
-func (r *ResampledSource) Read(samples []int16) (int, error) {
+func (r *ResampledSource) Read(samples []int32) (int, error) {
 	// Calculate how many input samples we need
 	neededInput := r.resampler.InputSamplesNeeded(len(samples))
 	if neededInput > len(r.inputBuffer) {

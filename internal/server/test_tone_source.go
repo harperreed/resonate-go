@@ -21,7 +21,7 @@ func NewTestToneSource() *TestToneSource {
 	}
 }
 
-func (s *TestToneSource) Read(samples []int16) (int, error) {
+func (s *TestToneSource) Read(samples []int32) (int, error) {
 	s.sampleMu.Lock()
 	defer s.sampleMu.Unlock()
 
@@ -32,8 +32,10 @@ func (s *TestToneSource) Read(samples []int16) (int, error) {
 		t := float64(s.sampleIndex+uint64(i)) / float64(DefaultSampleRate)
 		sample := math.Sin(2 * math.Pi * s.frequency * t)
 
-		// Convert to 16-bit PCM
-		pcmValue := int16(sample * 32767.0 * 0.5) // 50% volume
+		// Convert to 24-bit PCM (using int32)
+		// Scale to 24-bit range and apply 50% volume to avoid clipping
+		const max24bit = 8388607 // 2^23 - 1
+		pcmValue := int32(sample * max24bit * 0.5)
 
 		// Stereo (duplicate to both channels)
 		samples[i*2] = pcmValue

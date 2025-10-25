@@ -28,16 +28,19 @@ func TestVolumeMultiplier(t *testing.T) {
 }
 
 func TestApplyVolume(t *testing.T) {
-	samples := []int16{1000, -1000, 500, -500}
+	// Use int32 samples in 24-bit range (left-shifted from 16-bit)
+	samples := []int32{1000 << 8, -1000 << 8, 500 << 8, -500 << 8}
 	volume := 50
 	muted := false
 
 	result := applyVolume(samples, volume, muted)
 
-	if result[0] != 500 {
-		t.Errorf("expected 500, got %d", result[0])
+	expected0 := int32(500 << 8)
+	if result[0] != expected0 {
+		t.Errorf("expected %d, got %d", expected0, result[0])
 	}
-	if result[1] != -500 {
-		t.Errorf("expected -500, got %d", result[1])
+	expected1 := int32(-500 << 8)
+	if result[1] != expected1 {
+		t.Errorf("expected %d, got %d", expected1, result[1])
 	}
 }

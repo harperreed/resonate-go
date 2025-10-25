@@ -31,14 +31,14 @@ func TestResampleUpsampling(t *testing.T) {
 	r := NewResampler(44100, 48000, 2)
 
 	// Input: 100 stereo samples (200 int16 values)
-	input := make([]int16, 200)
+	input := make([]int32, 200)
 	for i := range input {
-		input[i] = int16(i * 100) // Ramp signal
+		input[i] = int32(i * 100) // Ramp signal
 	}
 
 	// Calculate expected output size
 	expectedSize := int(float64(len(input)) * float64(48000) / float64(44100))
-	output := make([]int16, expectedSize)
+	output := make([]int32, expectedSize)
 
 	n := r.Resample(input, output)
 
@@ -71,13 +71,13 @@ func TestResampleDownsampling(t *testing.T) {
 	r := NewResampler(48000, 44100, 2)
 
 	// Input: 100 stereo samples
-	input := make([]int16, 200)
+	input := make([]int32, 200)
 	for i := range input {
-		input[i] = int16(i * 100)
+		input[i] = int32(i * 100)
 	}
 
 	expectedSize := int(float64(len(input)) * float64(44100) / float64(48000))
-	output := make([]int16, expectedSize)
+	output := make([]int32, expectedSize)
 
 	n := r.Resample(input, output)
 
@@ -94,12 +94,12 @@ func TestResampleSameRate(t *testing.T) {
 	// No resampling needed (48000 -> 48000)
 	r := NewResampler(48000, 48000, 2)
 
-	input := make([]int16, 200)
+	input := make([]int32, 200)
 	for i := range input {
-		input[i] = int16(i * 100)
+		input[i] = int32(i * 100)
 	}
 
-	output := make([]int16, len(input)+10) // Extra space for rounding
+	output := make([]int32, len(input)+10) // Extra space for rounding
 	n := r.Resample(input, output)
 
 	// Should produce approximately the same number of samples
@@ -122,13 +122,13 @@ func TestResampleStereo(t *testing.T) {
 	r := NewResampler(44100, 48000, 2)
 
 	// Create input with different L/R patterns
-	input := make([]int16, 20) // 10 stereo samples
+	input := make([]int32, 20) // 10 stereo samples
 	for i := 0; i < 10; i++ {
 		input[i*2] = 1000    // Left channel
 		input[i*2+1] = -1000 // Right channel
 	}
 
-	output := make([]int16, 30) // Space for upsampled output
+	output := make([]int32, 30) // Space for upsampled output
 	n := r.Resample(input, output)
 
 	if n == 0 {
@@ -160,13 +160,13 @@ func TestResampleMono(t *testing.T) {
 	// Test mono resampling
 	r := NewResampler(44100, 48000, 1)
 
-	input := make([]int16, 100)
+	input := make([]int32, 100)
 	for i := range input {
-		input[i] = int16(i * 50)
+		input[i] = int32(i * 50)
 	}
 
 	expectedSize := int(float64(len(input)) * float64(48000) / float64(44100))
-	output := make([]int16, expectedSize)
+	output := make([]int32, expectedSize)
 
 	n := r.Resample(input, output)
 
@@ -179,13 +179,13 @@ func TestResampleLargeRatioUp(t *testing.T) {
 	// Test large upsampling ratio (44.1k -> 192k)
 	r := NewResampler(44100, 192000, 2)
 
-	input := make([]int16, 200)
+	input := make([]int32, 200)
 	for i := range input {
-		input[i] = int16(i * 10)
+		input[i] = int32(i * 10)
 	}
 
 	expectedSize := int(float64(len(input)) * float64(192000) / float64(44100))
-	output := make([]int16, expectedSize)
+	output := make([]int32, expectedSize)
 
 	n := r.Resample(input, output)
 
@@ -203,13 +203,13 @@ func TestResampleLargeRatioDown(t *testing.T) {
 	// Test large downsampling ratio (192k -> 48k)
 	r := NewResampler(192000, 48000, 2)
 
-	input := make([]int16, 200)
+	input := make([]int32, 200)
 	for i := range input {
-		input[i] = int16(i * 10)
+		input[i] = int32(i * 10)
 	}
 
 	expectedSize := int(float64(len(input)) * float64(48000) / float64(192000))
-	output := make([]int16, expectedSize)
+	output := make([]int32, expectedSize)
 
 	n := r.Resample(input, output)
 
@@ -226,8 +226,8 @@ func TestResampleLargeRatioDown(t *testing.T) {
 func TestResampleEmptyInput(t *testing.T) {
 	r := NewResampler(44100, 48000, 2)
 
-	input := []int16{}
-	output := make([]int16, 100)
+	input := []int32{}
+	output := make([]int32, 100)
 
 	n := r.Resample(input, output)
 
@@ -240,8 +240,8 @@ func TestResampleSmallBuffer(t *testing.T) {
 	r := NewResampler(44100, 48000, 2)
 
 	// Small input
-	input := []int16{100, -100, 200, -200}
-	output := make([]int16, 10)
+	input := []int32{100, -100, 200, -200}
+	output := make([]int32, 10)
 
 	n := r.Resample(input, output)
 
