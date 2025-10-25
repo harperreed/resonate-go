@@ -173,7 +173,29 @@ jobs:
 
           ### Installation
 
-          Download the appropriate binary for your platform, extract it, and run:
+          #### 1. Install Dependencies
+
+          **macOS (via Homebrew):**
+          ```bash
+          brew install opus opusfile flac
+          ```
+
+          **Linux (Debian/Ubuntu):**
+          ```bash
+          sudo apt-get install libopus-dev libopusfile-dev libflac-dev
+          ```
+
+          **Linux (Fedora/RHEL):**
+          ```bash
+          sudo dnf install opus-devel opusfile-devel flac-devel
+          ```
+
+          **Or use the install script:**
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/harperreed/resonate-go/${{ steps.version.outputs.VERSION }}/install-deps.sh | bash
+          ```
+
+          #### 2. Download and Run
 
           ```bash
           # Extract
