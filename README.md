@@ -347,6 +347,91 @@ Install to GOPATH/bin:
 make install
 ```
 
+## Contributing
+
+Found a bug or have a feature request? Please check existing issues or create a new one:
+
+**[View Issues](https://github.com/harperreed/resonate-go/issues)**
+
+### Known Issues & Todo
+
+**High Priority:**
+- [ ] Verify hi-res audio (96kHz/192kHz) compatibility with Music Assistant and other Resonate servers
+- [ ] Test multi-room synchronization accuracy with 5+ players
+- [ ] Audit protocol implementation for spec compliance as official spec evolves
+- [ ] Performance profiling and optimization for CPU/memory usage
+- [ ] Add comprehensive integration tests with real audio files
+
+**Protocol & Compatibility:**
+- [ ] Validate all message types match latest Resonate Protocol spec
+- [ ] Test with Music Assistant server
+- [ ] Test with other Resonate protocol implementations
+- [ ] Document any protocol extensions or deviations
+- [ ] Add protocol version negotiation
+
+**Audio Quality:**
+- [ ] Verify 24-bit audio pipeline maintains full bit depth
+- [ ] Test sample rate conversion quality (FLAC 96kHz → Opus 48kHz)
+- [ ] Add audio quality metrics and testing
+- [ ] Support for gapless playback
+- [ ] Volume curve optimization (currently linear)
+
+**Features:**
+- [ ] FLAC and MP3 decoder implementation (currently stubs)
+- [ ] Visualizer role support (FFT spectrum data)
+- [ ] Album artwork support (already in protocol)
+- [ ] Player groups and zones
+- [ ] Playlist/queue management
+- [ ] Cross-fade between tracks
+
+**Stability:**
+- [ ] Reconnection handling and automatic retry
+- [ ] Network error recovery
+- [ ] Graceful degradation on clock sync loss
+- [ ] Memory leak testing for long-running sessions
+- [ ] Stress testing with many clients
+
+**Developer Experience:**
+- [ ] Add godoc examples for all public APIs
+- [ ] CI/CD pipeline for automated testing
+- [ ] Cross-platform testing (Linux/macOS/Windows)
+- [ ] Docker containers for easy deployment
+- [ ] Benchmarking suite
+
+### Roadmap
+
+**v0.9.x (Current - Library Stabilization)**
+- Fix bugs discovered during testing
+- Improve protocol compliance
+- Add integration tests
+
+**v1.0.0 (Stable Release)**
+- Complete FLAC/MP3 decoder implementation
+- Full Music Assistant compatibility verified
+- 100% protocol spec compliance
+- Production-ready stability
+
+**v1.1.0 (Enhanced Features)**
+- Album artwork support
+- Gapless playback
+- Advanced volume controls
+
+**v2.0.0 (Advanced Multi-Room)**
+- Player groups and zones
+- Synchronized playback controls
+- Playlist management
+
 ## Protocol
 
 Implements the [Resonate Protocol](https://github.com/Resonate-Protocol/spec) specification.
+
+**Implementation Status:**
+- ✅ WebSocket transport
+- ✅ Client/Server handshake
+- ✅ Clock synchronization (NTP-style)
+- ✅ Audio streaming (binary frames)
+- ✅ Metadata messages
+- ✅ Control commands
+- ✅ Multi-codec support (Opus, PCM)
+- ⚠️  Visualizer role (planned)
+- ⚠️  Album artwork (protocol support exists, not implemented)
