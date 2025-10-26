@@ -1,5 +1,5 @@
 // ABOUTME: Entry point for Resonate Protocol server
-// ABOUTME: Parses CLI flags and starts the server application
+// ABOUTME: Thin CLI wrapper around pkg/resonate.Server with TUI support
 package main
 
 import (
@@ -10,8 +10,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/Resonate-Protocol/resonate-go/internal/server"
+	"github.com/Resonate-Protocol/resonate-go/pkg/resonate"
 )
 
 var (
@@ -65,33 +67,143 @@ func main() {
 		log.Printf("Press Ctrl-C to stop")
 	}
 
-	// Create server
-	config := server.Config{
-		Port:       *port,
-		Name:       serverName,
-		EnableMDNS: !*noMDNS,
-		Debug:      *debug,
-		UseTUI:     useTUI,
-		AudioFile:  *audioFile,
+	// Create audio source
+	var source resonate.AudioSource
+	if *audioFile == "" {
+		// Use test tone
+		source = resonate.NewTestTone(resonate.DefaultSampleRate, resonate.DefaultChannels)
+	} else {
+		// Use file source (from internal package for now)
+		// Note: This uses internal/server.NewAudioSource until file sources are migrated to pkg/
+		internalSource, err := server.NewAudioSource(*audioFile)
+		if err != nil {
+			log.Fatalf("Failed to create audio source: %v", err)
+		}
+		source = internalSource
 	}
 
-	srv := server.New(config)
+	// Create server config
+	config := resonate.ServerConfig{
+		Port:       *port,
+		Name:       serverName,
+		Source:     source,
+		EnableMDNS: !*noMDNS,
+		Debug:      *debug,
+	}
 
-	// Handle shutdown
+	srv, err := resonate.NewServer(config)
+	if err != nil {
+		log.Fatalf("Failed to create server: %v", err)
+	}
+
+	// Set up TUI if enabled
+	var tui *server.ServerTUI
+	var tuiDone chan struct{}
+	if useTUI {
+		tui = server.NewServerTUI(serverName, *port)
+		tuiDone = make(chan struct{})
+
+		// Start TUI in goroutine
+		go func() {
+			defer close(tuiDone)
+			if err := tui.Start(serverName, *port); err != nil {
+				log.Printf("TUI error: %v", err)
+			}
+		}()
+
+		// Give TUI time to initialize
+		time.Sleep(100 * time.Millisecond)
+
+		// Start TUI update loop
+		go func() {
+			ticker := time.NewTicker(500 * time.Millisecond)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					updateTUI(tui, srv, source, serverName, *port)
+				case <-tuiDone:
+					return
+				}
+			}
+		}()
+	}
+
+	// Handle shutdown signals
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// Handle TUI quit
+	var tuiQuitChan <-chan struct{}
+	if tui != nil {
+		tuiQuitChan = tui.QuitChan()
+	}
+
+	// Start server in goroutine
+	serverDone := make(chan error, 1)
 	go func() {
-		sig := <-sigChan
-		log.Printf("\n\n=== Received %v signal, shutting down gracefully... ===\n", sig)
-		srv.Stop()
-		log.Printf("Stop() called, waiting for cleanup...")
+		serverDone <- srv.Start()
 	}()
 
-	// Start server
-	if err := srv.Start(); err != nil {
+	// Wait for shutdown signal, TUI quit, or server error
+	select {
+	case sig := <-sigChan:
+		log.Printf("\n\n=== Received %v signal, shutting down gracefully... ===\n", sig)
+	case <-tuiQuitChan:
+		log.Printf("TUI quit requested, shutting down...")
+	case err := <-serverDone:
+		if err != nil {
+			log.Printf("Server error: %v", err)
+		}
+		// Server stopped, proceed to cleanup
+	}
+
+	// Stop server
+	srv.Stop()
+
+	// Stop TUI
+	if tui != nil {
+		tui.Stop()
+		<-tuiDone
+	}
+
+	// Wait for server to finish
+	if err := <-serverDone; err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
 
 	log.Printf("Server stopped")
+}
+
+// updateTUI sends current server state to the TUI
+func updateTUI(tui *server.ServerTUI, srv *resonate.Server, source resonate.AudioSource, serverName string, port int) {
+	// Get client info from server
+	clients := srv.Clients()
+
+	// Convert to TUI ClientInfo format
+	tuiClients := make([]server.ClientInfo, len(clients))
+	for i, c := range clients {
+		tuiClients[i] = server.ClientInfo{
+			Name:  c.Name,
+			ID:    c.ID,
+			Codec: c.Codec,
+			State: c.State,
+		}
+	}
+
+	// Get audio metadata
+	title, artist, _ := source.Metadata()
+	audioTitle := title
+	if artist != "" && artist != "Unknown Artist" {
+		audioTitle = artist + " - " + title
+	}
+
+	// Send update to TUI
+	tui.Update(server.ServerStatus{
+		Name:       serverName,
+		Port:       port,
+		Clients:    tuiClients,
+		AudioTitle: audioTitle,
+	})
 }
