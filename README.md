@@ -2,6 +2,109 @@
 
 A complete Resonate Protocol implementation in Go, featuring both server and player components for synchronized multi-room audio streaming.
 
+**Key Highlights:**
+- **Library-first design**: Use as a Go library or standalone CLI tools
+- **Hi-res audio support**: Up to 192kHz/24-bit streaming
+- **Multi-codec**: Opus, FLAC, MP3, PCM
+- **Precise synchronization**: Microsecond-level multi-room sync
+- **Easy to use**: Simple high-level APIs for common use cases
+- **Flexible**: Low-level component APIs for custom implementations
+
+## Using as a Library
+
+Install the library:
+
+```bash
+go get github.com/Resonate-Protocol/resonate-go
+```
+
+### Quick Start - Player
+
+```go
+package main
+
+import (
+    "log"
+    "github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+)
+
+func main() {
+    // Create and configure player
+    player, err := resonate.NewPlayer(resonate.PlayerConfig{
+        ServerAddr: "localhost:8927",
+        PlayerName: "Living Room",
+        Volume:     80,
+        OnMetadata: func(meta resonate.Metadata) {
+            log.Printf("Playing: %s - %s", meta.Artist, meta.Title)
+        },
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Connect and play
+    if err := player.Connect(); err != nil {
+        log.Fatal(err)
+    }
+    if err := player.Play(); err != nil {
+        log.Fatal(err)
+    }
+
+    // Keep running
+    select {}
+}
+```
+
+### Quick Start - Server
+
+```go
+package main
+
+import (
+    "log"
+    "github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+)
+
+func main() {
+    // Create test tone source (or use NewFileSource)
+    source := resonate.NewTestTone(192000, 2)
+
+    // Create and start server
+    server, err := resonate.NewServer(resonate.ServerConfig{
+        Port:   8927,
+        Name:   "My Server",
+        Source: source,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    if err := server.Start(); err != nil {
+        log.Fatal(err)
+    }
+
+    // Keep running
+    select {}
+}
+```
+
+### More Examples
+
+See the [examples/](examples/) directory for more complete examples:
+- **[basic-player/](examples/basic-player/)** - Simple player with status monitoring
+- **[basic-server/](examples/basic-server/)** - Simple server with test tone
+- **[custom-source/](examples/custom-source/)** - Custom audio source implementation
+
+### API Documentation
+
+- **High-level API**: `pkg/resonate` - Player and Server with simple configuration
+- **Audio processing**: `pkg/audio` - Format types, codecs, resampling, output
+- **Protocol**: `pkg/protocol` - WebSocket client and message types
+- **Clock sync**: `pkg/sync` - Precise timing synchronization
+- **Discovery**: `pkg/discovery` - mDNS service discovery
+
+Full API documentation: https://pkg.go.dev/github.com/Resonate-Protocol/resonate-go
+
 ## Features
 
 ### Server
@@ -154,21 +257,45 @@ The player TUI shows:
 
 ## Architecture
 
-### Server
+Resonate Go is built with a **library-first architecture**, providing three layers of APIs:
+
+### 1. High-Level API (`pkg/resonate`)
+Simple Player and Server types for common use cases:
+- **Player**: Connect, play, control volume, get stats
+- **Server**: Stream from AudioSource, manage clients
+- **AudioSource**: Interface for custom audio sources
+
+### 2. Component APIs
+Lower-level building blocks for custom implementations:
+- **`pkg/audio`**: Format types, sample conversions, Buffer
+- **`pkg/audio/decode`**: PCM, Opus, FLAC, MP3 decoders
+- **`pkg/audio/encode`**: PCM, Opus encoders
+- **`pkg/audio/resample`**: Sample rate conversion
+- **`pkg/audio/output`**: PortAudio playback
+- **`pkg/protocol`**: WebSocket client, message types
+- **`pkg/sync`**: Clock synchronization with drift compensation
+- **`pkg/discovery`**: mDNS service discovery
+
+### 3. CLI Tools
+Thin wrappers around the library APIs:
+- **`cmd/resonate-server`**: Full-featured server with TUI
+- **`cmd/resonate-player`**: Full-featured player with TUI
+
+### Server Pipeline
 
 The server streams audio in 20ms chunks with microsecond timestamps. Audio is buffered 500ms ahead to allow for network jitter and clock synchronization.
 
-**Pipeline:**
+**Processing flow:**
 1. Audio source (file decoder or test tone generator)
 2. Per-client codec negotiation (Opus or PCM)
 3. Timestamp generation using monotonic clock
 4. WebSocket binary message streaming
 
-### Player
+### Player Pipeline
 
 The player uses a sophisticated scheduling system to ensure perfectly synchronized playback across multiple rooms.
 
-**Pipeline:**
+**Processing flow:**
 1. WebSocket client receives timestamped audio chunks
 2. Clock sync system converts server timestamps to local time
 3. Priority queue scheduler with startup buffering (200ms)
