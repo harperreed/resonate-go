@@ -1,8 +1,12 @@
+> [!IMPORTANT]
+> This is a very early proof of concept of the resonate protocol. The protocol will likely change. This does work today (10/26), but may not work tomorrow.
+
 # Resonate Go
 
 A complete Resonate Protocol implementation in Go, featuring both server and player components for synchronized multi-room audio streaming.
 
 **Key Highlights:**
+
 - **Library-first design**: Use as a Go library or standalone CLI tools
 - **Hi-res audio support**: Up to 192kHz/24-bit streaming
 - **Multi-codec**: Opus, FLAC, MP3, PCM
@@ -91,6 +95,7 @@ func main() {
 ### More Examples
 
 See the [examples/](examples/) directory for more complete examples:
+
 - **[basic-player/](examples/basic-player/)** - Simple player with status monitoring
 - **[basic-server/](examples/basic-server/)** - Simple server with test tone
 - **[custom-source/](examples/custom-source/)** - Custom audio source implementation
@@ -108,11 +113,12 @@ Full API documentation: https://pkg.go.dev/github.com/Resonate-Protocol/resonate
 ## Features
 
 ### Server
+
 - Stream audio from multiple sources:
-  - Local files (MP3, FLAC)
-  - HTTP/HTTPS streams (direct MP3)
-  - HLS streams (.m3u8 live radio)
-  - Test tone generator (440Hz)
+    - Local files (MP3, FLAC)
+    - HTTP/HTTPS streams (direct MP3)
+    - HLS streams (.m3u8 live radio)
+    - Test tone generator (440Hz)
 - Automatic resampling to 48kHz for Opus compatibility
 - Multi-codec support (Opus @ 256kbps, PCM fallback)
 - mDNS service advertisement for automatic discovery
@@ -120,6 +126,7 @@ Full API documentation: https://pkg.go.dev/github.com/Resonate-Protocol/resonate
 - WebSocket-based streaming with precise timestamps
 
 ### Player
+
 - Automatic server discovery via mDNS
 - Multi-codec support (Opus, FLAC, PCM)
 - Precise clock synchronization for multi-room audio
@@ -200,10 +207,10 @@ Run without TUI (streaming logs to stdout):
 - `--port` - WebSocket server port (default: 8927)
 - `--name` - Server friendly name (default: hostname-resonate-server)
 - `--audio` - Audio source to stream:
-  - Local file path: `/path/to/music.mp3`, `/path/to/audio.flac`
-  - HTTP stream: `http://example.com/stream.mp3`
-  - HLS stream: `https://example.com/live.m3u8`
-  - If not specified, plays 440Hz test tone
+    - Local file path: `/path/to/music.mp3`, `/path/to/audio.flac`
+    - HTTP stream: `http://example.com/stream.mp3`
+    - HLS stream: `https://example.com/live.m3u8`
+    - If not specified, plays 440Hz test tone
 - `--log-file` - Log file path (default: resonate-server.log)
 - `--debug` - Enable debug logging
 - `--no-mdns` - Disable mDNS advertisement (clients must connect manually)
@@ -212,6 +219,7 @@ Run without TUI (streaming logs to stdout):
 #### Server TUI
 
 The server TUI shows:
+
 - Server name and port
 - Uptime
 - Currently playing audio
@@ -244,6 +252,7 @@ Connect to a specific server manually:
 #### Player TUI
 
 The player TUI shows:
+
 - Player name
 - Server connection status
 - Current audio title/artist
@@ -260,13 +269,17 @@ The player TUI shows:
 Resonate Go is built with a **library-first architecture**, providing three layers of APIs:
 
 ### 1. High-Level API (`pkg/resonate`)
+
 Simple Player and Server types for common use cases:
+
 - **Player**: Connect, play, control volume, get stats
 - **Server**: Stream from AudioSource, manage clients
 - **AudioSource**: Interface for custom audio sources
 
 ### 2. Component APIs
+
 Lower-level building blocks for custom implementations:
+
 - **`pkg/audio`**: Format types, sample conversions, Buffer
 - **`pkg/audio/decode`**: PCM, Opus, FLAC, MP3 decoders
 - **`pkg/audio/encode`**: PCM, Opus encoders
@@ -277,7 +290,9 @@ Lower-level building blocks for custom implementations:
 - **`pkg/discovery`**: mDNS service discovery
 
 ### 3. CLI Tools
+
 Thin wrappers around the library APIs:
+
 - **`cmd/resonate-server`**: Full-featured server with TUI
 - **`cmd/resonate-player`**: Full-featured player with TUI
 
@@ -286,6 +301,7 @@ Thin wrappers around the library APIs:
 The server streams audio in 20ms chunks with microsecond timestamps. Audio is buffered 500ms ahead to allow for network jitter and clock synchronization.
 
 **Processing flow:**
+
 1. Audio source (file decoder or test tone generator)
 2. Per-client codec negotiation (Opus or PCM)
 3. Timestamp generation using monotonic clock
@@ -296,6 +312,7 @@ The server streams audio in 20ms chunks with microsecond timestamps. Audio is bu
 The player uses a sophisticated scheduling system to ensure perfectly synchronized playback across multiple rooms.
 
 **Processing flow:**
+
 1. WebSocket client receives timestamped audio chunks
 2. Clock sync system converts server timestamps to local time
 3. Priority queue scheduler with startup buffering (200ms)
@@ -305,6 +322,7 @@ The player uses a sophisticated scheduling system to ensure perfectly synchroniz
 ### Clock Synchronization
 
 The player uses a simple, robust clock synchronization system:
+
 - Calculates server loop origin on first sync
 - Direct time base matching (no drift prediction)
 - Continuous RTT measurement for quality monitoring
@@ -314,16 +332,19 @@ The player uses a simple, robust clock synchronization system:
 ## Example: Multi-Room Setup
 
 Terminal 1 - Start the server:
+
 ```bash
 ./resonate-server --audio ~/Music/favorite-album.mp3
 ```
 
 Terminal 2 - Living room player:
+
 ```bash
 ./resonate-go --name "Living Room"
 ```
 
 Terminal 3 - Kitchen player:
+
 ```bash
 ./resonate-go --name "Kitchen"
 ```
@@ -333,16 +354,19 @@ Both players will discover the server via mDNS and start playing in perfect sync
 ## Development
 
 Run tests:
+
 ```bash
 make test
 ```
 
 Clean binaries:
+
 ```bash
 make clean
 ```
 
 Install to GOPATH/bin:
+
 ```bash
 make install
 ```
@@ -356,6 +380,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 ### Known Issues & Todo
 
 **High Priority:**
+
 - [ ] Verify hi-res audio (96kHz/192kHz) compatibility with Music Assistant and other Resonate servers
 - [ ] Test multi-room synchronization accuracy with 5+ players
 - [ ] Audit protocol implementation for spec compliance as official spec evolves
@@ -363,6 +388,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 - [ ] Add comprehensive integration tests with real audio files
 
 **Protocol & Compatibility:**
+
 - [ ] Validate all message types match latest Resonate Protocol spec
 - [ ] Test with Music Assistant server
 - [ ] Test with other Resonate protocol implementations
@@ -370,6 +396,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 - [ ] Add protocol version negotiation
 
 **Audio Quality:**
+
 - [ ] Verify 24-bit audio pipeline maintains full bit depth
 - [ ] Test sample rate conversion quality (FLAC 96kHz → Opus 48kHz)
 - [ ] Add audio quality metrics and testing
@@ -377,6 +404,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 - [ ] Volume curve optimization (currently linear)
 
 **Features:**
+
 - [ ] FLAC and MP3 decoder implementation (currently stubs)
 - [ ] Visualizer role support (FFT spectrum data)
 - [ ] Album artwork support (already in protocol)
@@ -385,6 +413,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 - [ ] Cross-fade between tracks
 
 **Stability:**
+
 - [ ] Reconnection handling and automatic retry
 - [ ] Network error recovery
 - [ ] Graceful degradation on clock sync loss
@@ -392,6 +421,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 - [ ] Stress testing with many clients
 
 **Developer Experience:**
+
 - [ ] Add godoc examples for all public APIs
 - [ ] CI/CD pipeline for automated testing
 - [ ] Cross-platform testing (Linux/macOS/Windows)
@@ -401,22 +431,26 @@ Found a bug or have a feature request? Please check existing issues or create a 
 ### Roadmap
 
 **v0.9.x (Current - Library Stabilization)**
+
 - Fix bugs discovered during testing
 - Improve protocol compliance
 - Add integration tests
 
 **v1.0.0 (Stable Release)**
+
 - Complete FLAC/MP3 decoder implementation
 - Full Music Assistant compatibility verified
 - 100% protocol spec compliance
 - Production-ready stability
 
 **v1.1.0 (Enhanced Features)**
+
 - Album artwork support
 - Gapless playback
 - Advanced volume controls
 
 **v2.0.0 (Advanced Multi-Room)**
+
 - Player groups and zones
 - Synchronized playback controls
 - Playlist management
@@ -426,6 +460,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 Implements the [Resonate Protocol](https://github.com/Resonate-Protocol/spec) specification.
 
 **Implementation Status:**
+
 - ✅ WebSocket transport
 - ✅ Client/Server handshake
 - ✅ Clock synchronization (NTP-style)
@@ -433,5 +468,5 @@ Implements the [Resonate Protocol](https://github.com/Resonate-Protocol/spec) sp
 - ✅ Metadata messages
 - ✅ Control commands
 - ✅ Multi-codec support (Opus, PCM)
-- ⚠️  Visualizer role (planned)
-- ⚠️  Album artwork (protocol support exists, not implemented)
+- ⚠️ Visualizer role (planned)
+- ⚠️ Album artwork (protocol support exists, not implemented)
