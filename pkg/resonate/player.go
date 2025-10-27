@@ -127,13 +127,13 @@ func NewPlayer(config PlayerConfig) (*Player, error) {
 	clockSync := sync.NewClockSync()
 	sync.SetGlobalClockSync(clockSync)
 
-	// Create output
-	out := output.NewMalgo()
+	// Output will be created based on bit depth when stream starts
+	// (oto for 16-bit, malgo for 24-bit)
 
 	player := &Player{
 		config:     config,
 		clockSync:  clockSync,
-		output:     out,
+		output:     nil, // Created when format is known
 		ctx:        ctx,
 		cancel:     cancel,
 		serverAddr: config.ServerAddr,
@@ -321,6 +321,19 @@ func (p *Player) handleStreamStart() {
 				continue
 			}
 			p.decoder = decoder
+
+			// Create appropriate output backend based on bit depth
+			// Use oto for 16-bit (Music Assistant compatibility)
+			// Use malgo for 24-bit (true hi-res support)
+			if p.output == nil {
+				if format.BitDepth <= 16 {
+					p.output = output.NewOto()
+					log.Printf("Using oto backend for %d-bit audio", format.BitDepth)
+				} else {
+					p.output = output.NewMalgo()
+					log.Printf("Using malgo backend for %d-bit audio", format.BitDepth)
+				}
+			}
 
 			// Initialize output
 			if err := p.output.Open(format.SampleRate, format.Channels, format.BitDepth); err != nil {

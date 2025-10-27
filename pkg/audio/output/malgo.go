@@ -152,8 +152,8 @@ func (m *Malgo) Open(sampleRate, channels, bitDepth int) error {
 		return fmt.Errorf("unsupported bit depth: %d (supported: 16, 24, 32)", bitDepth)
 	}
 
-	// Create ring buffer (500ms capacity)
-	bufferSamples := (sampleRate * channels * 500) / 1000
+	// Create ring buffer (80ms capacity - tuned for Music Assistant)
+	bufferSamples := (sampleRate * channels * 80) / 1000
 	m.ringBuffer = NewRingBuffer(bufferSamples)
 
 	// Configure device
