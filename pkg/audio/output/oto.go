@@ -41,7 +41,12 @@ func NewOto() Output {
 }
 
 // Open initializes the output device
-func (o *Oto) Open(sampleRate, channels int) error {
+func (o *Oto) Open(sampleRate, channels, bitDepth int) error {
+	// oto only supports 16-bit output
+	if bitDepth != 16 {
+		log.Printf("Warning: oto only supports 16-bit output, ignoring requested bitDepth=%d", bitDepth)
+	}
+
 	// If already initialized with same format, reuse the existing context
 	if o.otoCtx != nil && o.sampleRate == sampleRate && o.channels == channels {
 		log.Printf("Audio output already initialized with same format, reusing context")

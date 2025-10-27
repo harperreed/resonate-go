@@ -128,7 +128,7 @@ func NewPlayer(config PlayerConfig) (*Player, error) {
 	sync.SetGlobalClockSync(clockSync)
 
 	// Create output
-	out := output.NewOto()
+	out := output.NewMalgo()
 
 	player := &Player{
 		config:     config,
@@ -323,7 +323,7 @@ func (p *Player) handleStreamStart() {
 			p.decoder = decoder
 
 			// Initialize output
-			if err := p.output.Open(format.SampleRate, format.Channels); err != nil {
+			if err := p.output.Open(format.SampleRate, format.Channels, format.BitDepth); err != nil {
 				p.notifyError(fmt.Errorf("failed to initialize output: %w", err))
 				continue
 			}

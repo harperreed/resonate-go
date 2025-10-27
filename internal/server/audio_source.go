@@ -187,6 +187,10 @@ type FLACSource struct {
 	title      string
 	artist     string
 	album      string
+
+	// Buffer for partial frames (FLAC frames may not align with chunk boundaries)
+	frameBuffer    []int32
+	frameBufferPos int
 }
 
 // NewFLACSource creates a new FLAC audio source
@@ -228,10 +232,34 @@ func NewFLACSource(filePath string) (*FLACSource, error) {
 }
 
 func (s *FLACSource) Read(samples []int32) (int, error) {
-	framesNeeded := len(samples) / s.channels
 	samplesRead := 0
 
-	for samplesRead < len(samples) && framesNeeded > 0 {
+	// First, drain any buffered samples from previous partial frame
+	if s.frameBuffer != nil && s.frameBufferPos < len(s.frameBuffer) {
+		available := len(s.frameBuffer) - s.frameBufferPos
+		toCopy := len(samples)
+		if toCopy > available {
+			toCopy = available
+		}
+
+		copy(samples[samplesRead:], s.frameBuffer[s.frameBufferPos:s.frameBufferPos+toCopy])
+		samplesRead += toCopy
+		s.frameBufferPos += toCopy
+
+		// If we've filled the output buffer, we're done
+		if samplesRead >= len(samples) {
+			return samplesRead, nil
+		}
+
+		// If we've consumed all buffered samples, clear the buffer
+		if s.frameBufferPos >= len(s.frameBuffer) {
+			s.frameBuffer = nil
+			s.frameBufferPos = 0
+		}
+	}
+
+	// Read new FLAC frames as needed
+	for samplesRead < len(samples) {
 		// Parse next frame
 		frame, err := s.stream.ParseNext()
 		if err != nil {
@@ -246,36 +274,60 @@ func (s *FLACSource) Read(samples []int32) (int, error) {
 					return samplesRead, fmt.Errorf("failed to create new stream: %w", decErr)
 				}
 				s.stream = newStream
+				s.frameBuffer = nil
+				s.frameBufferPos = 0
 				continue
 			}
 			return samplesRead, err
 		}
 
-		// Convert frame samples to int32 24-bit range
-		// FLAC samples are typically 16 or 24 bit, stored as int32
-		for i := 0; i < int(frame.BlockSize) && samplesRead < len(samples); i++ {
-			for ch := 0; ch < s.channels && samplesRead < len(samples); ch++ {
+		// Convert entire frame to int32 24-bit range
+		frameSize := int(frame.BlockSize) * s.channels
+		frameSamples := make([]int32, frameSize)
+		frameIdx := 0
+
+		for i := 0; i < int(frame.BlockSize); i++ {
+			for ch := 0; ch < s.channels; ch++ {
 				sample := frame.Subframes[ch].Samples[i]
 
 				// Convert to int32 24-bit range
-				// FLAC stores samples as signed integers with the specified bit depth
+				var converted int32
 				if s.bitDepth == 16 {
 					// Convert 16-bit to 24-bit range
-					samples[samplesRead] = sample << 8
+					converted = sample << 8
 				} else if s.bitDepth == 24 {
 					// Already 24-bit, use directly
-					samples[samplesRead] = sample
+					converted = sample
 				} else {
 					// For other bit depths, scale to 24-bit range
 					shift := s.bitDepth - 24
 					if shift > 0 {
-						samples[samplesRead] = sample >> shift
+						converted = sample >> shift
 					} else {
-						samples[samplesRead] = sample << -shift
+						converted = sample << -shift
 					}
 				}
-				samplesRead++
+
+				frameSamples[frameIdx] = converted
+				frameIdx++
 			}
+		}
+
+		// Copy as much as we can to the output buffer
+		remaining := len(samples) - samplesRead
+		toCopy := frameSize
+		if toCopy > remaining {
+			toCopy = remaining
+		}
+
+		copy(samples[samplesRead:], frameSamples[:toCopy])
+		samplesRead += toCopy
+
+		// If there are leftover samples, buffer them for next Read()
+		if toCopy < frameSize {
+			s.frameBuffer = frameSamples
+			s.frameBufferPos = toCopy
+			break
 		}
 	}
 

@@ -89,6 +89,7 @@ type Client struct {
 	// Negotiated codec for this client
 	Codec       string       // "pcm" or "opus" (flac falls back to pcm)
 	OpusEncoder *OpusEncoder // Opus encoder (if using opus codec)
+	Resampler   *Resampler   // Resampler for Opus (if source rate != 48kHz)
 
 	// Output channel for messages
 	sendChan chan interface{}
