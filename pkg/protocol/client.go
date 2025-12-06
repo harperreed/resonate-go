@@ -15,6 +15,15 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	// BinaryMessageHeaderSize is the size of binary message header (type byte + timestamp)
+	BinaryMessageHeaderSize = 1 + 8 // 9 bytes: 1 byte type + 8 byte timestamp
+
+	// AudioChunkMessageType is the binary message type ID for audio chunks
+	// Per spec: Player role binary messages use IDs 4-7 (bits 000001xx), slot 0 is audio
+	AudioChunkMessageType = 4
+)
+
 // Config holds client configuration
 type Config struct {
 	ServerAddr          string
@@ -218,21 +227,19 @@ func (c *Client) readMessages() {
 
 // handleBinaryMessage handles audio chunks
 func (c *Client) handleBinaryMessage(data []byte) {
-	if len(data) < 9 {
+	if len(data) < BinaryMessageHeaderSize {
 		log.Printf("Invalid binary message: too short")
 		return
 	}
 
 	msgType := data[0]
-	// Per spec: Player role binary messages use IDs 4-7 (bits 000001xx)
-	// ID 4 (slot 0) is for audio chunks
-	if msgType != 4 {
+	if msgType != AudioChunkMessageType {
 		log.Printf("Unknown binary message type: %d", msgType)
 		return
 	}
 
-	timestamp := int64(binary.BigEndian.Uint64(data[1:9]))
-	audioData := data[9:]
+	timestamp := int64(binary.BigEndian.Uint64(data[1:BinaryMessageHeaderSize]))
+	audioData := data[BinaryMessageHeaderSize:]
 
 	chunk := AudioChunk{
 		Timestamp: timestamp,
@@ -259,7 +266,10 @@ func (c *Client) handleJSONMessage(data []byte) {
 	switch msg.Type {
 	case "server/command":
 		var cmdMsg ServerCommandMessage
-		json.Unmarshal(payloadBytes, &cmdMsg)
+		if err := json.Unmarshal(payloadBytes, &cmdMsg); err != nil {
+			log.Printf("Failed to parse server/command: %v", err)
+			return
+		}
 		if cmdMsg.Player != nil {
 			select {
 			case c.ControlMsgs <- *cmdMsg.Player:
@@ -269,7 +279,10 @@ func (c *Client) handleJSONMessage(data []byte) {
 
 	case "server/time":
 		var timeMsg ServerTime
-		json.Unmarshal(payloadBytes, &timeMsg)
+		if err := json.Unmarshal(payloadBytes, &timeMsg); err != nil {
+			log.Printf("Failed to parse server/time: %v", err)
+			return
+		}
 		select {
 		case c.TimeSyncResp <- timeMsg:
 		case <-c.ctx.Done():
@@ -277,7 +290,10 @@ func (c *Client) handleJSONMessage(data []byte) {
 
 	case "stream/start":
 		var start StreamStart
-		json.Unmarshal(payloadBytes, &start)
+		if err := json.Unmarshal(payloadBytes, &start); err != nil {
+			log.Printf("Failed to parse stream/start: %v", err)
+			return
+		}
 		select {
 		case c.StreamStart <- start:
 		case <-c.ctx.Done():
@@ -285,7 +301,10 @@ func (c *Client) handleJSONMessage(data []byte) {
 
 	case "stream/clear":
 		var clear StreamClear
-		json.Unmarshal(payloadBytes, &clear)
+		if err := json.Unmarshal(payloadBytes, &clear); err != nil {
+			log.Printf("Failed to parse stream/clear: %v", err)
+			return
+		}
 		select {
 		case c.StreamClear <- clear:
 		case <-c.ctx.Done():
@@ -293,7 +312,10 @@ func (c *Client) handleJSONMessage(data []byte) {
 
 	case "stream/end":
 		var end StreamEnd
-		json.Unmarshal(payloadBytes, &end)
+		if err := json.Unmarshal(payloadBytes, &end); err != nil {
+			log.Printf("Failed to parse stream/end: %v", err)
+			return
+		}
 		select {
 		case c.StreamEnd <- end:
 		case <-c.ctx.Done():

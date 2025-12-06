@@ -140,8 +140,8 @@ func (s *Scheduler) Stats() SchedulerStats {
 
 // BufferDepth returns the current buffer queue depth in milliseconds
 func (s *Scheduler) BufferDepth() int {
-	// Each buffer is typically 10ms (480 samples at 48kHz)
-	return s.bufferQ.Len() * 10
+	// Each buffer is 20ms (server sends ChunkDurationMs = 20)
+	return s.bufferQ.Len() * 20
 }
 
 // Stop stops the scheduler
