@@ -149,6 +149,15 @@ func (s *Scheduler) Stop() {
 	s.cancel()
 }
 
+// Clear clears all buffered audio (used for seek operations)
+func (s *Scheduler) Clear() {
+	// Reset the buffer queue
+	s.bufferQ = NewBufferQueue()
+	// Re-enter buffering mode to rebuild buffer
+	s.buffering = true
+	log.Printf("Scheduler buffers cleared, re-entering buffering mode")
+}
+
 // BufferQueue is a priority queue for audio buffers
 type BufferQueue struct {
 	items []audio.Buffer
