@@ -9,7 +9,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/audio"
+	"github.com/Sendspin/sendspin-go/internal/audio"
 	"github.com/ebitengine/oto/v3"
 )
 

@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio"
+	"github.com/Sendspin/sendspin-go/pkg/audio"
 )
 
 func TestNewPCM(t *testing.T) {

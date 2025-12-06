@@ -1,6 +1,6 @@
-// ABOUTME: High-level Server API for Resonate streaming
+// ABOUTME: High-level Server API for Sendspin streaming
 // ABOUTME: Wraps server components into a simple, user-friendly interface
-package resonate
+package sendspin
 
 import (
 	"context"
@@ -12,15 +12,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/discovery"
-	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
-	"github.com/Resonate-Protocol/resonate-go/internal/server"
+	"github.com/Sendspin/sendspin-go/internal/discovery"
+	"github.com/Sendspin/sendspin-go/internal/protocol"
+	"github.com/Sendspin/sendspin-go/internal/server"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
 const (
-	// ProtocolVersion is the version of the Resonate protocol we implement
+	// ProtocolVersion is the version of the Sendspin protocol we implement
 	ProtocolVersion = 1
 
 	// Message type for binary audio chunks
@@ -36,7 +36,7 @@ const (
 	BufferAheadMs   = 500 // Send audio 500ms ahead
 )
 
-// ServerConfig configures a Resonate server
+// ServerConfig configures a Sendspin server
 type ServerConfig struct {
 	// Port to listen on (default: 8927)
 	Port int
@@ -54,7 +54,7 @@ type ServerConfig struct {
 	Debug bool
 }
 
-// Server represents a Resonate streaming server
+// Server represents a Sendspin streaming server
 type Server struct {
 	config   ServerConfig
 	serverID string
@@ -120,14 +120,14 @@ type ClientInfo struct {
 	Codec  string
 }
 
-// NewServer creates a new Resonate server
+// NewServer creates a new Sendspin server
 func NewServer(config ServerConfig) (*Server, error) {
 	// Validate config
 	if config.Port == 0 {
 		config.Port = 8927
 	}
 	if config.Name == "" {
-		config.Name = "Resonate Server"
+		config.Name = "Sendspin Server"
 	}
 	if config.Source == nil {
 		return nil, fmt.Errorf("audio source is required")
@@ -179,7 +179,7 @@ func (s *Server) Start() error {
 	}
 
 	// Set up HTTP handlers
-	s.mux.HandleFunc("/resonate", s.handleWebSocket)
+	s.mux.HandleFunc("/sendspin", s.handleWebSocket)
 
 	// Start audio streaming
 	s.wg.Add(1)

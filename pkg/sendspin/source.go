@@ -1,6 +1,6 @@
-// ABOUTME: Audio source abstraction for Resonate streaming
+// ABOUTME: Audio source abstraction for Sendspin streaming
 // ABOUTME: Provides AudioSource interface and common implementations
-package resonate
+package sendspin
 
 import (
 	"math"
@@ -82,7 +82,7 @@ func (s *TestToneSource) Read(samples []int32) (int, error) {
 func (s *TestToneSource) SampleRate() int { return s.sampleRate }
 func (s *TestToneSource) Channels() int   { return s.channels }
 func (s *TestToneSource) Metadata() (string, string, string) {
-	return "Test Tone", "Resonate", "Test Signal"
+	return "Test Tone", "Sendspin", "Test Signal"
 }
 func (s *TestToneSource) Close() error { return nil }
 

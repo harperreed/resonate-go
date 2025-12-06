@@ -108,7 +108,7 @@ func (m tuiModel) View() string {
 	var b strings.Builder
 
 	// Title
-	b.WriteString(titleStyle.Render("Resonate Server"))
+	b.WriteString(titleStyle.Render("Sendspin Server"))
 	b.WriteString("\n\n")
 
 	// Server info

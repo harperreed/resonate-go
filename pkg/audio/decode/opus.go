@@ -5,7 +5,7 @@ package decode
 import (
 	"fmt"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio"
+	"github.com/Sendspin/sendspin-go/pkg/audio"
 	"gopkg.in/hraban/opus.v2"
 )
 

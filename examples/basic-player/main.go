@@ -1,4 +1,4 @@
-// ABOUTME: Basic Resonate player example
+// ABOUTME: Basic Sendspin player example
 // ABOUTME: Demonstrates how to connect to a server and play audio
 package main
 
@@ -10,31 +10,31 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+	"github.com/Sendspin/sendspin-go/pkg/sendspin"
 )
 
 func main() {
 	// Parse command-line flags
-	serverAddr := flag.String("server", "localhost:8927", "Resonate server address")
+	serverAddr := flag.String("server", "localhost:8927", "Sendspin server address")
 	playerName := flag.String("name", "Basic Player", "Player name")
 	volume := flag.Int("volume", 80, "Initial volume (0-100)")
 	flag.Parse()
 
 	// Create player configuration
-	config := resonate.PlayerConfig{
+	config := sendspin.PlayerConfig{
 		ServerAddr: *serverAddr,
 		PlayerName: *playerName,
 		Volume:     *volume,
 		BufferMs:   500, // 500ms playback buffer
-		DeviceInfo: resonate.DeviceInfo{
-			ProductName:     "Resonate Example Player",
-			Manufacturer:    "Resonate",
+		DeviceInfo: sendspin.DeviceInfo{
+			ProductName:     "Sendspin Example Player",
+			Manufacturer:    "Sendspin",
 			SoftwareVersion: "1.0.0",
 		},
-		OnMetadata: func(meta resonate.Metadata) {
+		OnMetadata: func(meta sendspin.Metadata) {
 			log.Printf("Now playing: %s - %s (%s)", meta.Artist, meta.Title, meta.Album)
 		},
-		OnStateChange: func(state resonate.PlayerState) {
+		OnStateChange: func(state sendspin.PlayerState) {
 			log.Printf("State changed: %s (volume: %d, muted: %v)", state.State, state.Volume, state.Muted)
 		},
 		OnError: func(err error) {
@@ -43,7 +43,7 @@ func main() {
 	}
 
 	// Create player
-	player, err := resonate.NewPlayer(config)
+	player, err := sendspin.NewPlayer(config)
 	if err != nil {
 		log.Fatalf("Failed to create player: %v", err)
 	}

@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Public API Packages**
 
-- `pkg/resonate` - High-level Player and Server APIs for most use cases
+- `pkg/sendspin` - High-level Player and Server APIs for most use cases
   - `Player` - Connect to servers and play synchronized audio with volume control, callbacks
   - `Server` - Serve audio to multiple clients with custom source support
   - `AudioSource` - Interface for custom audio sources
@@ -50,18 +50,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Output` - Common interface for playback backends
   - PortAudio implementation for cross-platform audio
 
-- `pkg/protocol` - Resonate wire protocol
+- `pkg/protocol` - Sendspin wire protocol
   - Message types for client/server communication
   - WebSocket client implementation
   - Protocol version negotiation
 
 - `pkg/sync` - Clock synchronization
-  - NTP-style clock sync with Resonate servers
+  - NTP-style clock sync with Sendspin servers
   - Round-trip time measurement
   - Quality tracking for sync accuracy
 
 - `pkg/discovery` - mDNS service discovery
-  - Discover Resonate servers on local network
+  - Discover Sendspin servers on local network
   - Advertise server availability
   - Service registration and browsing
 
@@ -90,8 +90,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Audio processing now consistently uses int32 samples in 24-bit range
 
 **Architecture**
-- Player CLI (`resonate-player`) - Thin wrapper around `pkg/resonate.Player`
-- Server CLI (`resonate-server`) - Thin wrapper around `pkg/resonate.Server`
+- Player CLI (`sendspin-player`) - Thin wrapper around `pkg/sendspin.Player`
+- Server CLI (`sendspin-server`) - Thin wrapper around `pkg/sendspin.Server`
 - All audio processing moved to reusable public packages
 - Clean separation between library code and CLI code
 
@@ -128,20 +128,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Migration Guide
 
-For users of pre-1.0.0 versions, the library API is now the recommended way to use Resonate:
+For users of pre-1.0.0 versions, the library API is now the recommended way to use Sendspin:
 
 **Old (Internal API):**
 ```go
 // Not recommended - internal packages
-import "github.com/Resonate-Protocol/resonate-go/internal/player"
+import "github.com/Sendspin/sendspin-go/internal/player"
 ```
 
 **New (Public API):**
 ```go
 // Recommended - public library API
-import "github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+import "github.com/Sendspin/sendspin-go/pkg/sendspin"
 
-player, err := resonate.NewPlayer(resonate.PlayerConfig{
+player, err := sendspin.NewPlayer(sendspin.PlayerConfig{
     ServerAddr: "localhost:8927",
     PlayerName: "Living Room",
     Volume:     80,

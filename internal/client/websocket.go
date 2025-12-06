@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
+	"github.com/Sendspin/sendspin-go/internal/protocol"
 	"github.com/gorilla/websocket"
 )
 

@@ -1,4 +1,4 @@
-module github.com/Resonate-Protocol/resonate-go
+module github.com/Sendspin/sendspin-go
 
 go 1.24.1
 

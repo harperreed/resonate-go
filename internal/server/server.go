@@ -1,4 +1,4 @@
-// ABOUTME: Main server implementation for Resonate Protocol
+// ABOUTME: Main server implementation for Sendspin Protocol
 // ABOUTME: Manages WebSocket connections, client state, and audio streaming
 package server
 
@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/discovery"
-	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
+	"github.com/Sendspin/sendspin-go/internal/discovery"
+	"github.com/Sendspin/sendspin-go/internal/protocol"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -36,7 +36,7 @@ type Config struct {
 	AudioFile  string // Path to audio file to stream (MP3, FLAC, WAV). Empty = test tone
 }
 
-// Server represents the Resonate server
+// Server represents the Sendspin server
 type Server struct {
 	config   Config
 	serverID string
@@ -173,7 +173,7 @@ func (s *Server) Start() error {
 	}
 
 	// Set up HTTP handlers
-	s.mux.HandleFunc("/resonate", s.handleWebSocket)
+	s.mux.HandleFunc("/sendspin", s.handleWebSocket)
 
 	// Start audio streaming
 	s.wg.Add(1)

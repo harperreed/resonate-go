@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/sync"
+	"github.com/Sendspin/sendspin-go/internal/sync"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -125,8 +125,8 @@ func (m Model) renderHeader() string {
 	}
 	innerWidth := width - 4 // Account for borders
 
-	titleWidth := width - 20 // Space for "┌─ Resonate Player " prefix
-	title := "┌─ Resonate Player " + repeatString("─", titleWidth) + "┐\n"
+	titleWidth := width - 20 // Space for "┌─ Sendspin Player " prefix
+	title := "┌─ Sendspin Player " + repeatString("─", titleWidth) + "┐\n"
 
 	statusLine := fmt.Sprintf("│ Status: %-*s │\n", innerWidth-9, truncate(connStatus, innerWidth-9))
 	syncLine := fmt.Sprintf("│ Sync:   %s %-*s │\n", syncIcon, innerWidth-11, truncate(syncText, innerWidth-11))

@@ -1,10 +1,10 @@
 # Basic Server Example
 
-This example demonstrates how to create a simple Resonate streaming server that broadcasts a test tone to connected players.
+This example demonstrates how to create a simple Sendspin streaming server that broadcasts a test tone to connected players.
 
 ## What it does
 
-- Creates a Resonate server that streams a 440Hz test tone
+- Creates a Sendspin server that streams a 440Hz test tone
 - Listens for WebSocket connections from players
 - Broadcasts synchronized audio to all connected clients
 - Supports mDNS service advertisement for easy discovery
@@ -63,17 +63,17 @@ Disable mDNS:
 
 ```go
 // Create audio source (440Hz test tone)
-source := resonate.NewTestTone(192000, 2)
+source := sendspin.NewTestTone(192000, 2)
 
 // Create and start server
-config := resonate.ServerConfig{
+config := sendspin.ServerConfig{
     Port:       8927,
     Name:       "My Server",
     Source:     source,
     EnableMDNS: true,
 }
 
-server, _ := resonate.NewServer(config)
+server, _ := sendspin.NewServer(config)
 server.Start()
 ```
 
@@ -88,7 +88,7 @@ Start the server:
 In another terminal, connect a player:
 
 ```bash
-cd ../../cmd/resonate-player
+cd ../..
 go run . -server localhost:8927
 ```
 
@@ -97,5 +97,5 @@ You should hear a 440Hz tone (A4 note) playing.
 ## Next steps
 
 - See `examples/custom-source/` for implementing custom audio sources (files, streams, etc.)
-- Check out the server CLI (`cmd/resonate-server/`) for a full-featured server with TUI
+- Check out the server CLI (`cmd/sendspin-server/`) for a full-featured server with TUI
 - Modify the test tone frequency or add multiple frequencies for testing

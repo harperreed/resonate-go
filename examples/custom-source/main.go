@@ -1,5 +1,5 @@
 // ABOUTME: Custom AudioSource implementation example
-// ABOUTME: Demonstrates how to create custom audio sources for Resonate
+// ABOUTME: Demonstrates how to create custom audio sources for Sendspin
 package main
 
 import (
@@ -11,7 +11,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+	"github.com/Sendspin/sendspin-go/pkg/sendspin"
 )
 
 // MultiToneSource generates multiple sine waves at different frequencies
@@ -84,7 +84,7 @@ func (s *MultiToneSource) Channels() int {
 
 // Metadata implements AudioSource.Metadata
 func (s *MultiToneSource) Metadata() (title, artist, album string) {
-	return "Multi-Tone Test Signal", "Resonate Examples", "Custom Sources"
+	return "Multi-Tone Test Signal", "Sendspin Examples", "Custom Sources"
 }
 
 // Close implements AudioSource.Close
@@ -153,7 +153,7 @@ func (s *SweepSource) Read(samples []int32) (int, error) {
 func (s *SweepSource) SampleRate() int { return s.sampleRate }
 func (s *SweepSource) Channels() int   { return s.channels }
 func (s *SweepSource) Metadata() (string, string, string) {
-	return "Frequency Sweep", "Resonate Examples", "Custom Sources"
+	return "Frequency Sweep", "Sendspin Examples", "Custom Sources"
 }
 func (s *SweepSource) Close() error { return nil }
 
@@ -165,7 +165,7 @@ func main() {
 	channels := flag.Int("channels", 2, "Number of channels")
 	flag.Parse()
 
-	var source resonate.AudioSource
+	var source sendspin.AudioSource
 
 	// Create audio source based on mode
 	switch *mode {
@@ -182,7 +182,7 @@ func main() {
 
 	case "single":
 		// Single 440 Hz tone (same as basic example)
-		source = resonate.NewTestTone(*sampleRate, *channels)
+		source = sendspin.NewTestTone(*sampleRate, *channels)
 		log.Printf("Creating single tone: 440 Hz")
 
 	default:
@@ -190,7 +190,7 @@ func main() {
 	}
 
 	// Create server
-	config := resonate.ServerConfig{
+	config := sendspin.ServerConfig{
 		Port:       *port,
 		Name:       "Custom Source Example",
 		Source:     source,
@@ -198,7 +198,7 @@ func main() {
 		Debug:      false,
 	}
 
-	server, err := resonate.NewServer(config)
+	server, err := sendspin.NewServer(config)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}

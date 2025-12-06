@@ -1,6 +1,6 @@
-// ABOUTME: High-level Player API for Resonate streaming
+// ABOUTME: High-level Player API for Sendspin streaming
 // ABOUTME: Provides simple interface for connecting to servers and playing audio
-package resonate
+package sendspin
 
 import (
 	"context"
@@ -8,11 +8,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio"
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio/decode"
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio/output"
-	"github.com/Resonate-Protocol/resonate-go/pkg/protocol"
-	"github.com/Resonate-Protocol/resonate-go/pkg/sync"
+	"github.com/Sendspin/sendspin-go/pkg/audio"
+	"github.com/Sendspin/sendspin-go/pkg/audio/decode"
+	"github.com/Sendspin/sendspin-go/pkg/audio/output"
+	"github.com/Sendspin/sendspin-go/pkg/protocol"
+	"github.com/Sendspin/sendspin-go/pkg/sync"
 	"github.com/google/uuid"
 )
 
@@ -112,10 +112,10 @@ func NewPlayer(config PlayerConfig) (*Player, error) {
 		config.BufferMs = 500
 	}
 	if config.DeviceInfo.ProductName == "" {
-		config.DeviceInfo.ProductName = "Resonate Player"
+		config.DeviceInfo.ProductName = "Sendspin Player"
 	}
 	if config.DeviceInfo.Manufacturer == "" {
-		config.DeviceInfo.Manufacturer = "Resonate"
+		config.DeviceInfo.Manufacturer = "Sendspin"
 	}
 	if config.DeviceInfo.SoftwareVersion == "" {
 		config.DeviceInfo.SoftwareVersion = "1.0.0"

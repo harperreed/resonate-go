@@ -5,7 +5,7 @@ package encode
 import (
 	"testing"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio"
+	"github.com/Sendspin/sendspin-go/pkg/audio"
 )
 
 func TestNewOpus(t *testing.T) {

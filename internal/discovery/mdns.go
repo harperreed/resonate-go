@@ -1,4 +1,4 @@
-// ABOUTME: mDNS service discovery for Resonate Protocol
+// ABOUTME: mDNS service discovery for Sendspin Protocol
 // ABOUTME: Handles both advertisement (server-initiated) and browsing (client-initiated)
 package discovery
 
@@ -15,7 +15,7 @@ import (
 type Config struct {
 	ServiceName string
 	Port        int
-	ServerMode  bool // If true, advertise as _resonate-server._tcp, otherwise _resonate._tcp
+	ServerMode  bool // If true, advertise as _sendspin-server._tcp, otherwise _sendspin._tcp
 }
 
 // Manager handles mDNS operations
@@ -53,9 +53,9 @@ func (m *Manager) Advertise() error {
 	}
 
 	// Choose service type based on mode
-	serviceType := "_resonate._tcp"
+	serviceType := "_sendspin._tcp"
 	if m.config.ServerMode {
-		serviceType = "_resonate-server._tcp"
+		serviceType = "_sendspin-server._tcp"
 	}
 
 	service, err := mdns.NewMDNSService(
@@ -65,7 +65,7 @@ func (m *Manager) Advertise() error {
 		"",
 		m.config.Port,
 		ips,
-		[]string{"path=/resonate"},
+		[]string{"path=/sendspin"},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create service: %w", err)
@@ -86,7 +86,7 @@ func (m *Manager) Advertise() error {
 	return nil
 }
 
-// Browse searches for Resonate servers
+// Browse searches for Sendspin servers
 func (m *Manager) Browse() error {
 	go m.browseLoop()
 	return nil
@@ -122,7 +122,7 @@ func (m *Manager) browseLoop() {
 		}()
 
 		params := &mdns.QueryParam{
-			Service: "_resonate-server._tcp",
+			Service: "_sendspin-server._tcp",
 			Domain:  "local",
 			Timeout: 3,
 			Entries: entries,

@@ -1,6 +1,6 @@
 // ABOUTME: Integration tests for Player API
 // ABOUTME: Tests player creation, configuration, and basic operations
-package resonate
+package sendspin
 
 import (
 	"testing"

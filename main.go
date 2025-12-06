@@ -1,4 +1,4 @@
-// ABOUTME: Entry point for Resonate Protocol player
+// ABOUTME: Entry point for Sendspin Protocol player
 // ABOUTME: Parses CLI flags and starts the player application
 package main
 
@@ -13,20 +13,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/discovery"
-	internalsync "github.com/Resonate-Protocol/resonate-go/internal/sync"
-	"github.com/Resonate-Protocol/resonate-go/internal/ui"
-	"github.com/Resonate-Protocol/resonate-go/internal/version"
-	"github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+	"github.com/Sendspin/sendspin-go/internal/discovery"
+	internalsync "github.com/Sendspin/sendspin-go/internal/sync"
+	"github.com/Sendspin/sendspin-go/internal/ui"
+	"github.com/Sendspin/sendspin-go/internal/version"
+	"github.com/Sendspin/sendspin-go/pkg/sendspin"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 var (
 	serverAddr = flag.String("server", "", "Manual server address (skip mDNS)")
 	port       = flag.Int("port", 8927, "Port for mDNS advertisement")
-	name       = flag.String("name", "", "Player friendly name (default: hostname-resonate-player)")
+	name       = flag.String("name", "", "Player friendly name (default: hostname-sendspin-player)")
 	bufferMs   = flag.Int("buffer-ms", 150, "Jitter buffer size in milliseconds")
-	logFile    = flag.String("log-file", "resonate-player.log", "Log file path")
+	logFile    = flag.String("log-file", "sendspin-player.log", "Log file path")
 	noTUI      = flag.Bool("no-tui", false, "Disable TUI, use streaming logs instead")
 	streamLogs = flag.Bool("stream-logs", false, "Alias for -no-tui")
 )
@@ -60,11 +60,11 @@ func main() {
 		if err != nil {
 			hostname = "unknown"
 		}
-		playerName = fmt.Sprintf("%s-resonate-player", hostname)
+		playerName = fmt.Sprintf("%s-sendspin-player", hostname)
 	}
 
 	if !useTUI {
-		log.Printf("Starting Resonate Player: %s", playerName)
+		log.Printf("Starting Sendspin Player: %s", playerName)
 		log.Printf("TUI disabled - logging to file for debugging")
 	}
 
@@ -112,17 +112,17 @@ func main() {
 	}
 
 	// Create player with callbacks for TUI
-	config := resonate.PlayerConfig{
+	config := sendspin.PlayerConfig{
 		ServerAddr: serverAddress,
 		PlayerName: playerName,
 		Volume:     100,
 		BufferMs:   *bufferMs,
-		DeviceInfo: resonate.DeviceInfo{
+		DeviceInfo: sendspin.DeviceInfo{
 			ProductName:     version.Product,
 			Manufacturer:    version.Manufacturer,
 			SoftwareVersion: version.Version,
 		},
-		OnStateChange: func(state resonate.PlayerState) {
+		OnStateChange: func(state sendspin.PlayerState) {
 			updateTUI(ui.StatusMsg{
 				Codec:      state.Codec,
 				SampleRate: state.SampleRate,
@@ -137,7 +137,7 @@ func main() {
 				})
 			}
 		},
-		OnMetadata: func(meta resonate.Metadata) {
+		OnMetadata: func(meta sendspin.Metadata) {
 			updateTUI(ui.StatusMsg{
 				Title:  meta.Title,
 				Artist: meta.Artist,
@@ -149,7 +149,7 @@ func main() {
 		},
 	}
 
-	player, err := resonate.NewPlayer(config)
+	player, err := sendspin.NewPlayer(config)
 	if err != nil {
 		log.Fatalf("Failed to create player: %v", err)
 	}
@@ -197,7 +197,7 @@ func main() {
 }
 
 // handleVolumeControl processes volume changes from TUI
-func handleVolumeControl(player *resonate.Player, volumeCtrl *ui.VolumeControl) {
+func handleVolumeControl(player *sendspin.Player, volumeCtrl *ui.VolumeControl) {
 	for {
 		select {
 		case vol := <-volumeCtrl.Changes:
@@ -211,7 +211,7 @@ func handleVolumeControl(player *resonate.Player, volumeCtrl *ui.VolumeControl) 
 }
 
 // statsUpdateLoop periodically updates TUI with playback statistics
-func statsUpdateLoop(player *resonate.Player, updateTUI func(ui.StatusMsg)) {
+func statsUpdateLoop(player *sendspin.Player, updateTUI func(ui.StatusMsg)) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 

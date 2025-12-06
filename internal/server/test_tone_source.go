@@ -50,6 +50,6 @@ func (s *TestToneSource) Read(samples []int32) (int, error) {
 func (s *TestToneSource) SampleRate() int { return DefaultSampleRate }
 func (s *TestToneSource) Channels() int   { return DefaultChannels }
 func (s *TestToneSource) Metadata() (string, string, string) {
-	return "Test Tone", "Resonate Server", "Reference Implementation"
+	return "Test Tone", "Sendspin Server", "Reference Implementation"
 }
 func (s *TestToneSource) Close() error { return nil }

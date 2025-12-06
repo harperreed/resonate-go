@@ -1,9 +1,9 @@
 > [!IMPORTANT]
-> This is a very early proof of concept of the resonate protocol. The protocol will likely change. This does work today (10/26), but may not work tomorrow.
+> This is a very early proof of concept of the Sendspin protocol. The protocol will likely change. This does work today (10/26), but may not work tomorrow.
 
-# Resonate Go
+# Sendspin Go
 
-A complete Resonate Protocol implementation in Go, featuring both server and player components for synchronized multi-room audio streaming.
+A complete Sendspin Protocol implementation in Go, featuring both server and player components for synchronized multi-room audio streaming.
 
 **Key Highlights:**
 
@@ -19,7 +19,7 @@ A complete Resonate Protocol implementation in Go, featuring both server and pla
 Install the library:
 
 ```bash
-go get github.com/Resonate-Protocol/resonate-go
+go get github.com/Sendspin/sendspin-go
 ```
 
 ### Quick Start - Player
@@ -29,16 +29,16 @@ package main
 
 import (
     "log"
-    "github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+    "github.com/Sendspin/sendspin-go/pkg/sendspin"
 )
 
 func main() {
     // Create and configure player
-    player, err := resonate.NewPlayer(resonate.PlayerConfig{
+    player, err := sendspin.NewPlayer(sendspin.PlayerConfig{
         ServerAddr: "localhost:8927",
         PlayerName: "Living Room",
         Volume:     80,
-        OnMetadata: func(meta resonate.Metadata) {
+        OnMetadata: func(meta sendspin.Metadata) {
             log.Printf("Playing: %s - %s", meta.Artist, meta.Title)
         },
     })
@@ -66,15 +66,15 @@ package main
 
 import (
     "log"
-    "github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+    "github.com/Sendspin/sendspin-go/pkg/sendspin"
 )
 
 func main() {
     // Create test tone source (or use NewFileSource)
-    source := resonate.NewTestTone(192000, 2)
+    source := sendspin.NewTestTone(192000, 2)
 
     // Create and start server
-    server, err := resonate.NewServer(resonate.ServerConfig{
+    server, err := sendspin.NewServer(sendspin.ServerConfig{
         Port:   8927,
         Name:   "My Server",
         Source: source,
@@ -102,13 +102,13 @@ See the [examples/](examples/) directory for more complete examples:
 
 ### API Documentation
 
-- **High-level API**: `pkg/resonate` - Player and Server with simple configuration
+- **High-level API**: `pkg/sendspin` - Player and Server with simple configuration
 - **Audio processing**: `pkg/audio` - Format types, codecs, resampling, output
 - **Protocol**: `pkg/protocol` - WebSocket client and message types
 - **Clock sync**: `pkg/sync` - Precise timing synchronization
 - **Discovery**: `pkg/discovery` - mDNS service discovery
 
-Full API documentation: https://pkg.go.dev/github.com/Resonate-Protocol/resonate-go
+Full API documentation: https://pkg.go.dev/github.com/Sendspin/sendspin-go
 
 ## Features
 
@@ -163,8 +163,8 @@ make
 Or build individually:
 
 ```bash
-make server  # Builds resonate-server
-make player  # Builds resonate-go
+make server  # Builds sendspin-server
+make player  # Builds sendspin-player
 ```
 
 ## Usage
@@ -174,44 +174,44 @@ make player  # Builds resonate-go
 Start a server with the interactive TUI (default, plays 440Hz test tone):
 
 ```bash
-./resonate-server
+./sendspin-server
 ```
 
 Stream a local audio file:
 
 ```bash
-./resonate-server --audio /path/to/music.mp3
-./resonate-server --audio /path/to/album.flac
+./sendspin-server --audio /path/to/music.mp3
+./sendspin-server --audio /path/to/album.flac
 ```
 
 Stream from HTTP/HTTPS:
 
 ```bash
-./resonate-server --audio http://example.com/stream.mp3
+./sendspin-server --audio http://example.com/stream.mp3
 ```
 
 Stream HLS/m3u8 (live radio):
 
 ```bash
-./resonate-server --audio "https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance"
+./sendspin-server --audio "https://stream.radiofrance.fr/fip/fip.m3u8?id=radiofrance"
 ```
 
 Run without TUI (streaming logs to stdout):
 
 ```bash
-./resonate-server --no-tui
+./sendspin-server --no-tui
 ```
 
 #### Server Options
 
 - `--port` - WebSocket server port (default: 8927)
-- `--name` - Server friendly name (default: hostname-resonate-server)
+- `--name` - Server friendly name (default: hostname-sendspin-server)
 - `--audio` - Audio source to stream:
     - Local file path: `/path/to/music.mp3`, `/path/to/audio.flac`
     - HTTP stream: `http://example.com/stream.mp3`
     - HLS stream: `https://example.com/live.m3u8`
     - If not specified, plays 440Hz test tone
-- `--log-file` - Log file path (default: resonate-server.log)
+- `--log-file` - Log file path (default: sendspin-server.log)
 - `--debug` - Enable debug logging
 - `--no-mdns` - Disable mDNS advertisement (clients must connect manually)
 - `--no-tui` - Disable TUI, use streaming logs instead
@@ -231,22 +231,22 @@ The server TUI shows:
 Start a player (auto-discovers servers via mDNS):
 
 ```bash
-./resonate-go --name "Living Room"
+./sendspin-player --name "Living Room"
 ```
 
 Connect to a specific server manually:
 
 ```bash
-./resonate-go --server ws://192.168.1.100:8927 --name "Kitchen"
+./sendspin-player --server ws://192.168.1.100:8927 --name "Kitchen"
 ```
 
 #### Player Options
 
 - `--server` - Manual server WebSocket address (skips mDNS discovery)
 - `--port` - Port for mDNS advertisement (default: 8927)
-- `--name` - Player friendly name (default: hostname-resonate-player)
+- `--name` - Player friendly name (default: hostname-sendspin-player)
 - `--buffer-ms` - Jitter buffer size in milliseconds (default: 150)
-- `--log-file` - Log file path (default: resonate-player.log)
+- `--log-file` - Log file path (default: sendspin-player.log)
 - `--debug` - Enable debug logging
 
 #### Player TUI
@@ -266,9 +266,9 @@ The player TUI shows:
 
 ## Architecture
 
-Resonate Go is built with a **library-first architecture**, providing three layers of APIs:
+Sendspin Go is built with a **library-first architecture**, providing three layers of APIs:
 
-### 1. High-Level API (`pkg/resonate`)
+### 1. High-Level API (`pkg/sendspin`)
 
 Simple Player and Server types for common use cases:
 
@@ -293,8 +293,8 @@ Lower-level building blocks for custom implementations:
 
 Thin wrappers around the library APIs:
 
-- **`cmd/resonate-server`**: Full-featured server with TUI
-- **`cmd/resonate-player`**: Full-featured player with TUI
+- **`cmd/sendspin-server`**: Full-featured server with TUI
+- **`cmd/sendspin-player`**: Full-featured player with TUI (main.go at root)
 
 ### Server Pipeline
 
@@ -334,19 +334,19 @@ The player uses a simple, robust clock synchronization system:
 Terminal 1 - Start the server:
 
 ```bash
-./resonate-server --audio ~/Music/favorite-album.mp3
+./sendspin-server --audio ~/Music/favorite-album.mp3
 ```
 
 Terminal 2 - Living room player:
 
 ```bash
-./resonate-go --name "Living Room"
+./sendspin-player --name "Living Room"
 ```
 
 Terminal 3 - Kitchen player:
 
 ```bash
-./resonate-go --name "Kitchen"
+./sendspin-player --name "Kitchen"
 ```
 
 Both players will discover the server via mDNS and start playing in perfect sync.
@@ -375,13 +375,13 @@ make install
 
 Found a bug or have a feature request? Please check existing issues or create a new one:
 
-**[View Issues](https://github.com/harperreed/resonate-go/issues)**
+**[View Issues](https://github.com/Sendspin/sendspin-go/issues)**
 
 ### Known Issues & Todo
 
 **High Priority:**
 
-- [ ] Verify hi-res audio (96kHz/192kHz) compatibility with Music Assistant and other Resonate servers
+- [ ] Verify hi-res audio (96kHz/192kHz) compatibility with Music Assistant and other Sendspin servers
 - [ ] Test multi-room synchronization accuracy with 5+ players
 - [ ] Audit protocol implementation for spec compliance as official spec evolves
 - [ ] Performance profiling and optimization for CPU/memory usage
@@ -389,9 +389,9 @@ Found a bug or have a feature request? Please check existing issues or create a 
 
 **Protocol & Compatibility:**
 
-- [ ] Validate all message types match latest Resonate Protocol spec
+- [ ] Validate all message types match latest Sendspin Protocol spec
 - [ ] Test with Music Assistant server
-- [ ] Test with other Resonate protocol implementations
+- [ ] Test with other Sendspin protocol implementations
 - [ ] Document any protocol extensions or deviations
 - [ ] Add protocol version negotiation
 
@@ -457,7 +457,7 @@ Found a bug or have a feature request? Please check existing issues or create a 
 
 ## Protocol
 
-Implements the [Resonate Protocol](https://github.com/Resonate-Protocol/spec) specification.
+Implements the [Sendspin Protocol](https://github.com/Sendspin/spec) specification.
 
 **Implementation Status:**
 

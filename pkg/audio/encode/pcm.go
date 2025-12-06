@@ -6,7 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio"
+	"github.com/Sendspin/sendspin-go/pkg/audio"
 )
 
 // PCMEncoder encodes PCM audio

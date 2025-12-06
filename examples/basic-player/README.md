@@ -1,10 +1,10 @@
 # Basic Player Example
 
-This example demonstrates how to create a simple Resonate player that connects to a server and plays audio.
+This example demonstrates how to create a simple Sendspin player that connects to a server and plays audio.
 
 ## What it does
 
-- Connects to a Resonate server
+- Connects to a Sendspin server
 - Starts audio playback with automatic clock synchronization
 - Displays metadata (title, artist, album) when received
 - Shows playback status and statistics
@@ -54,16 +54,16 @@ Set custom player name and volume:
 
 ```go
 // Create player with configuration
-config := resonate.PlayerConfig{
+config := sendspin.PlayerConfig{
     ServerAddr: "localhost:8927",
     PlayerName: "Living Room",
     Volume:     80,
-    OnMetadata: func(meta resonate.Metadata) {
+    OnMetadata: func(meta sendspin.Metadata) {
         log.Printf("Now playing: %s - %s", meta.Artist, meta.Title)
     },
 }
 
-player, _ := resonate.NewPlayer(config)
+player, _ := sendspin.NewPlayer(config)
 player.Connect()
 player.Play()
 ```
@@ -71,4 +71,4 @@ player.Play()
 ## Next steps
 
 - See `examples/custom-source/` for custom audio source implementation
-- Check out the player CLI (`cmd/resonate-player/`) for a full-featured TUI player
+- Check out the player CLI (root main.go) for a full-featured TUI player

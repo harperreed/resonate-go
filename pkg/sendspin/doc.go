@@ -1,6 +1,6 @@
-// ABOUTME: High-level Resonate library API
+// ABOUTME: High-level Sendspin library API
 // ABOUTME: Provides simple Player and Server APIs for most use cases
-// Package resonate provides high-level APIs for Resonate audio streaming.
+// Package sendspin provides high-level APIs for Sendspin audio streaming.
 //
 // This is the main entry point for most library users, providing:
 //   - Player: Connect to servers and play synchronized audio
@@ -11,7 +11,7 @@
 //
 // Example Player:
 //
-//	player, err := resonate.NewPlayer(resonate.PlayerConfig{
+//	player, err := sendspin.NewPlayer(sendspin.PlayerConfig{
 //	    ServerAddr: "localhost:8927",
 //	    PlayerName: "Living Room",
 //	    Volume:     80,
@@ -21,10 +21,10 @@
 //
 // Example Server:
 //
-//	source, err := resonate.FileSource("/path/to/audio.flac")
-//	server, err := resonate.NewServer(resonate.ServerConfig{
+//	source, err := sendspin.FileSource("/path/to/audio.flac")
+//	server, err := sendspin.NewServer(sendspin.ServerConfig{
 //	    Port:   8927,
 //	    Source: source,
 //	})
 //	err = server.Start()
-package resonate
+package sendspin

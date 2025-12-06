@@ -8,8 +8,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/audio"
-	"github.com/Resonate-Protocol/resonate-go/internal/sync"
+	"github.com/Sendspin/sendspin-go/internal/audio"
+	"github.com/Sendspin/sendspin-go/internal/sync"
 )
 
 // Scheduler manages playback timing

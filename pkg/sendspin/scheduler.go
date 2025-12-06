@@ -1,6 +1,6 @@
-// ABOUTME: Timestamp-based playback scheduler for pkg/resonate
+// ABOUTME: Timestamp-based playback scheduler for pkg/sendspin
 // ABOUTME: Schedules audio buffers for precise playback timing
-package resonate
+package sendspin
 
 import (
 	"container/heap"
@@ -8,8 +8,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio"
-	"github.com/Resonate-Protocol/resonate-go/pkg/sync"
+	"github.com/Sendspin/sendspin-go/pkg/audio"
+	"github.com/Sendspin/sendspin-go/pkg/sync"
 )
 
 // Scheduler manages playback timing

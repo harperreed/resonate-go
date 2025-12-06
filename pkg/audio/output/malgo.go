@@ -8,7 +8,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/audio"
+	"github.com/Sendspin/sendspin-go/pkg/audio"
 	"github.com/gen2brain/malgo"
 )
 

@@ -1,12 +1,12 @@
-# Resonate Examples
+# Sendspin Examples
 
-This directory contains example programs demonstrating how to use the Resonate library.
+This directory contains example programs demonstrating how to use the Sendspin library.
 
 ## Available Examples
 
 ### [basic-player](basic-player/)
 
-A simple audio player that connects to a Resonate server and plays synchronized audio.
+A simple audio player that connects to a Sendspin server and plays synchronized audio.
 
 **Key features:**
 - Simple configuration with callbacks
@@ -93,37 +93,37 @@ go build ./examples/custom-source/
 
 ## Key Concepts Demonstrated
 
-### Player API (`pkg/resonate`)
+### Player API (`pkg/sendspin`)
 
 ```go
 // Create and configure player
-config := resonate.PlayerConfig{
+config := sendspin.PlayerConfig{
     ServerAddr: "localhost:8927",
     PlayerName: "Living Room",
     Volume:     80,
-    OnMetadata: func(meta resonate.Metadata) {
+    OnMetadata: func(meta sendspin.Metadata) {
         fmt.Printf("Now playing: %s - %s\n", meta.Artist, meta.Title)
     },
 }
 
-player, _ := resonate.NewPlayer(config)
+player, _ := sendspin.NewPlayer(config)
 player.Connect()
 player.Play()
 ```
 
-### Server API (`pkg/resonate`)
+### Server API (`pkg/sendspin`)
 
 ```go
 // Create audio source
-source := resonate.NewTestTone(192000, 2)
+source := sendspin.NewTestTone(192000, 2)
 
 // Create and start server
-config := resonate.ServerConfig{
+config := sendspin.ServerConfig{
     Port:   8927,
     Source: source,
 }
 
-server, _ := resonate.NewServer(config)
+server, _ := sendspin.NewServer(config)
 server.Start()
 ```
 
@@ -153,8 +153,8 @@ Servers advertise via mDNS by default. Players can discover local servers automa
 
 ## Next Steps
 
-- Check out the full CLI tools: `cmd/resonate-player/` and `cmd/resonate-server/`
-- Read the API documentation: `pkg/resonate/`
+- Check out the full CLI tools: `cmd/sendspin-server/` (and root main.go for player)
+- Read the API documentation: `pkg/sendspin/`
 - Explore lower-level APIs: `pkg/audio/`, `pkg/protocol/`, `pkg/sync/`
 
 ## Troubleshooting

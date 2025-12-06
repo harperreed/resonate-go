@@ -81,6 +81,10 @@ jobs:
       run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
     - name: Build binaries
+      env:
+        BUILD_VERSION: ${{ steps.version.outputs.VERSION }}
+        BUILD_OS: ${{ matrix.os }}
+        BUILD_ARCH: ${{ matrix.arch }}
       run: |
         mkdir -p dist
 
@@ -88,20 +92,19 @@ jobs:
         # Note: Not fully static due to ALSA/PortAudio complexity, but self-contained for audio codecs
         export CGO_ENABLED=1
 
-        VERSION="${{ steps.version.outputs.VERSION }}"
-        LDFLAGS="-X github.com/Resonate-Protocol/resonate-go/internal/version.Version=${VERSION} -s -w"
+        LDFLAGS="-X github.com/Sendspin/sendspin-go/internal/version.Version=${BUILD_VERSION} -s -w"
 
         # Player
-        go build -ldflags "${LDFLAGS}" -o dist/resonate-player-${{ matrix.os }}-${{ matrix.arch }} .
+        go build -ldflags "${LDFLAGS}" -o "dist/sendspin-player-${BUILD_OS}-${BUILD_ARCH}" .
 
         # Server
-        go build -ldflags "${LDFLAGS}" -o dist/resonate-server-${{ matrix.os }}-${{ matrix.arch }} ./cmd/resonate-server
+        go build -ldflags "${LDFLAGS}" -o "dist/sendspin-server-${BUILD_OS}-${BUILD_ARCH}" ./cmd/sendspin-server
 
         # Show dependencies for verification
         echo "Player dependencies:"
-        ldd dist/resonate-player-${{ matrix.os }}-${{ matrix.arch }} || true
+        ldd "dist/sendspin-player-${BUILD_OS}-${BUILD_ARCH}" || true
         echo "Server dependencies:"
-        ldd dist/resonate-server-${{ matrix.os }}-${{ matrix.arch }} || true
+        ldd "dist/sendspin-server-${BUILD_OS}-${BUILD_ARCH}" || true
 
     - name: Create archives
       run: |
@@ -145,12 +148,14 @@ jobs:
 
     - name: Generate release notes
       id: release_notes
+      env:
+        RELEASE_VERSION: ${{ steps.version.outputs.VERSION }}
       run: |
-        PREV_TAG=$(git describe --tags --abbrev=0 ${{ steps.version.outputs.VERSION }}^ 2>/dev/null || echo "")
+        PREV_TAG=$(git describe --tags --abbrev=0 "${RELEASE_VERSION}^" 2>/dev/null || echo "")
         if [ -z "$PREV_TAG" ]; then
           echo "NOTES=Initial release" >> $GITHUB_OUTPUT
         else
-          NOTES=$(git log --pretty=format:"- %s (%h)" ${PREV_TAG}..${{ steps.version.outputs.VERSION }})
+          NOTES=$(git log --pretty=format:"- %s (%h)" "${PREV_TAG}..${RELEASE_VERSION}")
           echo "NOTES<<EOF" >> $GITHUB_OUTPUT
           echo "$NOTES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -162,16 +167,16 @@ jobs:
         tag_name: ${{ steps.version.outputs.VERSION }}
         name: Release ${{ steps.version.outputs.VERSION }}
         body: |
-          ## Resonate Protocol ${{ steps.version.outputs.VERSION }}
+          ## Sendspin Protocol ${{ steps.version.outputs.VERSION }}
 
           ### Downloads
 
           **Linux (x86_64) - Portable Binaries**
 
-          - **Player:** `resonate-player-linux-amd64.tar.gz`
-          - **Server:** `resonate-server-linux-amd64.tar.gz`
+          - **Player:** `sendspin-player-linux-amd64.tar.gz`
+          - **Server:** `sendspin-server-linux-amd64.tar.gz`
 
-          ✨ **Portable binaries** that work on most modern Linux distributions!
+          Portable binaries that work on most modern Linux distributions!
 
           These binaries include all audio codec libraries and should work out-of-the-box on systems with:
           - ALSA audio system (standard on most Linux distros)
@@ -181,10 +186,10 @@ jobs:
 
           ```bash
           # Download and extract
-          tar xzf resonate-player-linux-amd64.tar.gz
+          tar xzf sendspin-player-linux-amd64.tar.gz
 
           # Run immediately!
-          ./resonate-player-linux-amd64
+          ./sendspin-player-linux-amd64
           ```
 
           If you get missing library errors, install the audio system package:
@@ -204,15 +209,15 @@ jobs:
           For macOS or other platforms, you can build from source:
 
           ```bash
-          git clone https://github.com/harperreed/resonate-go.git
-          cd resonate-go
+          git clone https://github.com/Sendspin/sendspin-go.git
+          cd sendspin-go
 
           # Install dependencies
           brew install opus opusfile flac  # macOS
           # or: sudo apt-get install libopus-dev libopusfile-dev libflac-dev  # Linux
 
           # Build
-          go build -o resonate-player .
+          go build -o sendspin-player .
           ```
 
           ### Changes

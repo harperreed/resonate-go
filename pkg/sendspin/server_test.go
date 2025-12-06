@@ -1,6 +1,6 @@
 // ABOUTME: Integration tests for Server API
 // ABOUTME: Tests server creation, startup, client connections, and streaming
-package resonate
+package sendspin
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
+	"github.com/Sendspin/sendspin-go/internal/protocol"
 	"github.com/gorilla/websocket"
 )
 
@@ -143,7 +143,7 @@ func TestServerClientConnection(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Connect as client
-	wsURL := "ws://localhost:8930/resonate"
+	wsURL := "ws://localhost:8930/sendspin"
 	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("failed to connect to server: %v", err)
@@ -284,7 +284,7 @@ func TestServerMultipleClients(t *testing.T) {
 	// Connect multiple clients
 	clients := make([]*websocket.Conn, 3)
 	for i := 0; i < 3; i++ {
-		wsURL := "ws://localhost:8931/resonate"
+		wsURL := "ws://localhost:8931/sendspin"
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		if err != nil {
 			t.Fatalf("failed to connect client %d: %v", i, err)
@@ -370,7 +370,7 @@ func TestServerDuplicateClientID(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Connect first client
-	wsURL := "ws://localhost:8932/resonate"
+	wsURL := "ws://localhost:8932/sendspin"
 	conn1, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("failed to connect first client: %v", err)

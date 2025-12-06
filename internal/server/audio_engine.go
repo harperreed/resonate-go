@@ -1,4 +1,4 @@
-// ABOUTME: Audio streaming engine for Resonate server
+// ABOUTME: Audio streaming engine for Sendspin server
 // ABOUTME: Generates test tones and streams timestamped audio to clients
 package server
 
@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/protocol"
+	"github.com/Sendspin/sendspin-go/internal/protocol"
 )
 
 const (

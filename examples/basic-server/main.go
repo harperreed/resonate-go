@@ -1,4 +1,4 @@
-// ABOUTME: Basic Resonate server example
+// ABOUTME: Basic Sendspin server example
 // ABOUTME: Demonstrates how to create a simple streaming server
 package main
 
@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/Resonate-Protocol/resonate-go/pkg/resonate"
+	"github.com/Sendspin/sendspin-go/pkg/sendspin"
 )
 
 func main() {
@@ -24,10 +24,10 @@ func main() {
 	log.Printf("Creating test tone source: %dHz, %d channels", *sampleRate, *channels)
 
 	// Create a test tone audio source
-	source := resonate.NewTestTone(*sampleRate, *channels)
+	source := sendspin.NewTestTone(*sampleRate, *channels)
 
 	// Create server configuration
-	config := resonate.ServerConfig{
+	config := sendspin.ServerConfig{
 		Port:       *port,
 		Name:       *serverName,
 		Source:     source,
@@ -36,12 +36,12 @@ func main() {
 	}
 
 	// Create server
-	server, err := resonate.NewServer(config)
+	server, err := sendspin.NewServer(config)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
 
-	log.Printf("Starting Resonate server...")
+	log.Printf("Starting Sendspin server...")
 	log.Printf("  Name: %s", *serverName)
 	log.Printf("  Port: %d", *port)
 	log.Printf("  Audio: %dHz, %d channels, 24-bit", *sampleRate, *channels)

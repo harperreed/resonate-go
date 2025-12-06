@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/Resonate-Protocol/resonate-go/internal/app"
+	"github.com/Sendspin/sendspin-go/internal/app"
 )
 
 var (
