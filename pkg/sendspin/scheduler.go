@@ -140,13 +140,22 @@ func (s *Scheduler) Stats() SchedulerStats {
 
 // BufferDepth returns the current buffer queue depth in milliseconds
 func (s *Scheduler) BufferDepth() int {
-	// Each buffer is typically 10ms (480 samples at 48kHz)
-	return s.bufferQ.Len() * 10
+	// Each buffer is 20ms (server sends ChunkDurationMs = 20)
+	return s.bufferQ.Len() * 20
 }
 
 // Stop stops the scheduler
 func (s *Scheduler) Stop() {
 	s.cancel()
+}
+
+// Clear clears all buffered audio (used for seek operations)
+func (s *Scheduler) Clear() {
+	// Reset the buffer queue
+	s.bufferQ = NewBufferQueue()
+	// Re-enter buffering mode to rebuild buffer
+	s.buffering = true
+	log.Printf("Scheduler buffers cleared, re-entering buffering mode")
 }
 
 // BufferQueue is a priority queue for audio buffers

@@ -15,16 +15,25 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+const (
+	// BinaryMessageHeaderSize is the size of binary message header (type byte + timestamp)
+	BinaryMessageHeaderSize = 1 + 8 // 9 bytes: 1 byte type + 8 byte timestamp
+
+	// AudioChunkMessageType is the binary message type ID for audio chunks
+	// Per spec: Player role binary messages use IDs 4-7 (bits 000001xx), slot 0 is audio
+	AudioChunkMessageType = 4
+)
+
 // Config holds client configuration
 type Config struct {
-	ServerAddr        string
-	ClientID          string
-	Name              string
-	Version           int
-	DeviceInfo        DeviceInfo
-	PlayerSupport     PlayerSupport
-	MetadataSupport   MetadataSupport
-	VisualizerSupport VisualizerSupport
+	ServerAddr          string
+	ClientID            string
+	Name                string
+	Version             int
+	DeviceInfo          DeviceInfo
+	PlayerV1Support     PlayerV1Support
+	ArtworkV1Support    *ArtworkV1Support
+	VisualizerV1Support *VisualizerV1Support
 }
 
 // Client represents a WebSocket client
@@ -34,12 +43,14 @@ type Client struct {
 	mu     sync.RWMutex
 
 	// Message channels
-	AudioChunks   chan AudioChunk
-	ControlMsgs   chan ServerCommand
-	TimeSyncResp  chan ServerTime
-	StreamStart   chan StreamStart
-	Metadata      chan StreamMetadata
-	SessionUpdate chan SessionUpdate
+	AudioChunks  chan AudioChunk
+	ControlMsgs  chan PlayerCommand
+	TimeSyncResp chan ServerTime
+	StreamStart  chan StreamStart
+	StreamClear  chan StreamClear
+	StreamEnd    chan StreamEnd
+	ServerState  chan ServerStateMessage
+	GroupUpdate  chan GroupUpdate
 
 	// State
 	connected bool
@@ -58,15 +69,17 @@ func NewClient(config Config) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &Client{
-		config:        config,
-		AudioChunks:   make(chan AudioChunk, 100),
-		ControlMsgs:   make(chan ServerCommand, 10),
-		TimeSyncResp:  make(chan ServerTime, 10),
-		StreamStart:   make(chan StreamStart, 1),
-		Metadata:      make(chan StreamMetadata, 10),
-		SessionUpdate: make(chan SessionUpdate, 10),
-		ctx:           ctx,
-		cancel:        cancel,
+		config:       config,
+		AudioChunks:  make(chan AudioChunk, 100),
+		ControlMsgs:  make(chan PlayerCommand, 10),
+		TimeSyncResp: make(chan ServerTime, 10),
+		StreamStart:  make(chan StreamStart, 1),
+		StreamClear:  make(chan StreamClear, 10),
+		StreamEnd:    make(chan StreamEnd, 1),
+		ServerState:  make(chan ServerStateMessage, 10),
+		GroupUpdate:  make(chan GroupUpdate, 10),
+		ctx:          ctx,
+		cancel:       cancel,
 	}
 }
 
@@ -99,16 +112,25 @@ func (c *Client) Connect() error {
 
 // handshake performs the protocol handshake
 func (c *Client) handshake() error {
-	// Send client/hello
+	// Build versioned role list per spec
+	roles := []string{"player@v1", "metadata@v1"}
+	if c.config.ArtworkV1Support != nil {
+		roles = append(roles, "artwork@v1")
+	}
+	if c.config.VisualizerV1Support != nil {
+		roles = append(roles, "visualizer@v1")
+	}
+
+	// Send client/hello with versioned roles
 	hello := ClientHello{
-		ClientID:          c.config.ClientID,
-		Name:              c.config.Name,
-		Version:           c.config.Version,
-		SupportedRoles:    []string{"player", "metadata", "visualizer"},
-		DeviceInfo:        &c.config.DeviceInfo,
-		PlayerSupport:     &c.config.PlayerSupport,
-		MetadataSupport:   &c.config.MetadataSupport,
-		VisualizerSupport: &c.config.VisualizerSupport,
+		ClientID:            c.config.ClientID,
+		Name:                c.config.Name,
+		Version:             c.config.Version,
+		SupportedRoles:      roles,
+		DeviceInfo:          &c.config.DeviceInfo,
+		PlayerV1Support:     &c.config.PlayerV1Support,
+		ArtworkV1Support:    c.config.ArtworkV1Support,
+		VisualizerV1Support: c.config.VisualizerV1Support,
 	}
 
 	msg := Message{
@@ -143,15 +165,17 @@ func (c *Client) handshake() error {
 
 	log.Printf("Handshake complete with server")
 
-	// Send initial state
-	state := ClientState{
-		State:  "idle",
-		Volume: 100,
-		Muted:  false,
+	// Send initial state per spec (client/state with nested player object)
+	state := ClientStateMessage{
+		Player: &PlayerState{
+			State:  "synchronized",
+			Volume: 100,
+			Muted:  false,
+		},
 	}
 
 	stateMsg := Message{
-		Type:    "player/update",
+		Type:    "client/state",
 		Payload: state,
 	}
 
@@ -203,19 +227,19 @@ func (c *Client) readMessages() {
 
 // handleBinaryMessage handles audio chunks
 func (c *Client) handleBinaryMessage(data []byte) {
-	if len(data) < 9 {
+	if len(data) < BinaryMessageHeaderSize {
 		log.Printf("Invalid binary message: too short")
 		return
 	}
 
 	msgType := data[0]
-	if msgType != 1 {
+	if msgType != AudioChunkMessageType {
 		log.Printf("Unknown binary message type: %d", msgType)
 		return
 	}
 
-	timestamp := int64(binary.BigEndian.Uint64(data[1:9]))
-	audioData := data[9:]
+	timestamp := int64(binary.BigEndian.Uint64(data[1:BinaryMessageHeaderSize]))
+	audioData := data[BinaryMessageHeaderSize:]
 
 	chunk := AudioChunk{
 		Timestamp: timestamp,
@@ -228,7 +252,7 @@ func (c *Client) handleBinaryMessage(data []byte) {
 	}
 }
 
-// handleJSONMessage routes JSON messages
+// handleJSONMessage routes JSON messages per spec
 func (c *Client) handleJSONMessage(data []byte) {
 	var msg Message
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -241,16 +265,24 @@ func (c *Client) handleJSONMessage(data []byte) {
 
 	switch msg.Type {
 	case "server/command":
-		var cmd ServerCommand
-		json.Unmarshal(payloadBytes, &cmd)
-		select {
-		case c.ControlMsgs <- cmd:
-		case <-c.ctx.Done():
+		var cmdMsg ServerCommandMessage
+		if err := json.Unmarshal(payloadBytes, &cmdMsg); err != nil {
+			log.Printf("Failed to parse server/command: %v", err)
+			return
+		}
+		if cmdMsg.Player != nil {
+			select {
+			case c.ControlMsgs <- *cmdMsg.Player:
+			case <-c.ctx.Done():
+			}
 		}
 
 	case "server/time":
 		var timeMsg ServerTime
-		json.Unmarshal(payloadBytes, &timeMsg)
+		if err := json.Unmarshal(payloadBytes, &timeMsg); err != nil {
+			log.Printf("Failed to parse server/time: %v", err)
+			return
+		}
 		select {
 		case c.TimeSyncResp <- timeMsg:
 		case <-c.ctx.Done():
@@ -258,35 +290,68 @@ func (c *Client) handleJSONMessage(data []byte) {
 
 	case "stream/start":
 		var start StreamStart
-		json.Unmarshal(payloadBytes, &start)
+		if err := json.Unmarshal(payloadBytes, &start); err != nil {
+			log.Printf("Failed to parse stream/start: %v", err)
+			return
+		}
 		select {
 		case c.StreamStart <- start:
 		case <-c.ctx.Done():
 		}
 
-	case "stream/metadata":
-		var meta StreamMetadata
-		json.Unmarshal(payloadBytes, &meta)
+	case "stream/clear":
+		var clear StreamClear
+		if err := json.Unmarshal(payloadBytes, &clear); err != nil {
+			log.Printf("Failed to parse stream/clear: %v", err)
+			return
+		}
 		select {
-		case c.Metadata <- meta:
+		case c.StreamClear <- clear:
 		case <-c.ctx.Done():
 		}
 
-	case "session/update":
-		var update SessionUpdate
-		if err := json.Unmarshal(payloadBytes, &update); err != nil {
-			log.Printf("Failed to parse session/update: %v", err)
+	case "stream/end":
+		var end StreamEnd
+		if err := json.Unmarshal(payloadBytes, &end); err != nil {
+			log.Printf("Failed to parse stream/end: %v", err)
 			return
 		}
-		log.Printf("Session update: group=%s, state=%s", update.GroupID, update.PlaybackState)
-		if update.Metadata != nil {
-			log.Printf("Metadata: %s - %s (%s)", update.Metadata.Artist, update.Metadata.Title, update.Metadata.Album)
-		}
-		// Send to channel for player to handle
 		select {
-		case c.SessionUpdate <- update:
+		case c.StreamEnd <- end:
+		case <-c.ctx.Done():
+		}
+
+	case "server/state":
+		var state ServerStateMessage
+		if err := json.Unmarshal(payloadBytes, &state); err != nil {
+			log.Printf("Failed to parse server/state: %v", err)
+			return
+		}
+		if state.Metadata != nil {
+			log.Printf("Metadata: %v - %v (%v)",
+				derefString(state.Metadata.Artist),
+				derefString(state.Metadata.Title),
+				derefString(state.Metadata.Album))
+		}
+		select {
+		case c.ServerState <- state:
 		case <-time.After(100 * time.Millisecond):
-			log.Printf("Session update channel full, dropping message")
+			log.Printf("Server state channel full, dropping message")
+		}
+
+	case "group/update":
+		var update GroupUpdate
+		if err := json.Unmarshal(payloadBytes, &update); err != nil {
+			log.Printf("Failed to parse group/update: %v", err)
+			return
+		}
+		log.Printf("Group update: id=%v, state=%v",
+			derefString(update.GroupID),
+			derefString(update.PlaybackState))
+		select {
+		case c.GroupUpdate <- update:
+		case <-time.After(100 * time.Millisecond):
+			log.Printf("Group update channel full, dropping message")
 		}
 
 	default:
@@ -294,11 +359,32 @@ func (c *Client) handleJSONMessage(data []byte) {
 	}
 }
 
-// SendState sends a player/update message
-func (c *Client) SendState(state ClientState) error {
+// derefString safely dereferences a string pointer
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// SendState sends a client/state message per spec
+func (c *Client) SendState(state PlayerState) error {
 	msg := Message{
-		Type:    "player/update",
-		Payload: state,
+		Type: "client/state",
+		Payload: ClientStateMessage{
+			Player: &state,
+		},
+	}
+	return c.sendJSON(msg)
+}
+
+// SendGoodbye sends a client/goodbye message before disconnecting
+func (c *Client) SendGoodbye(reason string) error {
+	msg := Message{
+		Type: "client/goodbye",
+		Payload: ClientGoodbye{
+			Reason: reason,
+		},
 	}
 	return c.sendJSON(msg)
 }

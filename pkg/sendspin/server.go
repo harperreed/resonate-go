@@ -9,12 +9,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/Sendspin/sendspin-go/internal/discovery"
-	"github.com/Sendspin/sendspin-go/internal/protocol"
 	"github.com/Sendspin/sendspin-go/internal/server"
+	"github.com/Sendspin/sendspin-go/pkg/protocol"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
@@ -23,8 +24,9 @@ const (
 	// ProtocolVersion is the version of the Sendspin protocol we implement
 	ProtocolVersion = 1
 
-	// Message type for binary audio chunks
-	AudioChunkMessageType = 1
+	// Binary message type IDs per spec (bits 7-2 for role, bits 1-0 for slot)
+	// Player role: 000001xx (4-7), slot 0 = 4
+	AudioChunkMessageType = 4
 
 	// Audio format constants
 	DefaultSampleRate = 192000
@@ -93,7 +95,7 @@ type client struct {
 	Name         string
 	Conn         *websocket.Conn
 	Roles        []string
-	Capabilities *protocol.PlayerSupport
+	Capabilities *protocol.PlayerV1Support
 
 	// State
 	State  string
@@ -420,8 +422,8 @@ func (s *Server) handleConnection(conn *websocket.Conn) {
 		Name:         hello.Name,
 		Conn:         conn,
 		Roles:        hello.SupportedRoles,
-		Capabilities: hello.PlayerSupport,
-		State:        "idle",
+		Capabilities: hello.PlayerV1Support,
+		State:        "synchronized",
 		Volume:       100,
 		Muted:        false,
 		sendChan:     make(chan interface{}, 100),
@@ -442,11 +444,14 @@ func (s *Server) handleConnection(conn *websocket.Conn) {
 		log.Printf("Client disconnected: %s", c.Name)
 	}()
 
-	// Send server/hello
+	// Send server/hello with active roles per spec
+	activeRoles := s.activateRoles(hello.SupportedRoles)
 	serverHello := protocol.ServerHello{
-		ServerID: s.serverID,
-		Name:     s.config.Name,
-		Version:  ProtocolVersion,
+		ServerID:         s.serverID,
+		Name:             s.config.Name,
+		Version:          ProtocolVersion,
+		ActiveRoles:      activeRoles,
+		ConnectionReason: "playback", // We're a streaming server
 	}
 
 	if err := s.sendMessage(c, "server/hello", serverHello); err != nil {
@@ -530,8 +535,10 @@ func (s *Server) handleClientMessage(c *client, data []byte) {
 	switch msg.Type {
 	case "client/time":
 		s.handleTimeSync(c, msg.Payload)
-	case "player/update":
-		s.handlePlayerUpdate(c, msg.Payload)
+	case "client/state":
+		s.handleClientState(c, msg.Payload)
+	case "client/goodbye":
+		s.handleClientGoodbye(c, msg.Payload)
 	default:
 		if s.config.Debug {
 			log.Printf("Unknown message type: %s", msg.Type)
@@ -564,27 +571,46 @@ func (s *Server) handleTimeSync(c *client, payload interface{}) {
 	s.sendMessage(c, "server/time", response)
 }
 
-// handlePlayerUpdate handles state updates from players
-func (s *Server) handlePlayerUpdate(c *client, payload interface{}) {
+// handleClientState handles state updates from clients per spec
+func (s *Server) handleClientState(c *client, payload interface{}) {
 	stateData, err := json.Marshal(payload)
 	if err != nil {
 		return
 	}
 
-	var state protocol.ClientState
-	if err := json.Unmarshal(stateData, &state); err != nil {
+	var stateMsg protocol.ClientStateMessage
+	if err := json.Unmarshal(stateData, &stateMsg); err != nil {
 		return
 	}
 
-	c.mu.Lock()
-	c.State = state.State
-	c.Volume = state.Volume
-	c.Muted = state.Muted
-	c.mu.Unlock()
+	// Handle player state
+	if stateMsg.Player != nil {
+		c.mu.Lock()
+		c.State = stateMsg.Player.State
+		c.Volume = stateMsg.Player.Volume
+		c.Muted = stateMsg.Player.Muted
+		c.mu.Unlock()
 
-	if s.config.Debug {
-		log.Printf("Client %s state: %s (vol: %d, muted: %v)", c.Name, state.State, state.Volume, state.Muted)
+		if s.config.Debug {
+			log.Printf("Client %s state: %s (vol: %d, muted: %v)", c.Name, stateMsg.Player.State, stateMsg.Player.Volume, stateMsg.Player.Muted)
+		}
 	}
+}
+
+// handleClientGoodbye handles graceful disconnect from clients
+func (s *Server) handleClientGoodbye(c *client, payload interface{}) {
+	goodbyeData, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	var goodbye protocol.ClientGoodbye
+	if err := json.Unmarshal(goodbyeData, &goodbye); err != nil {
+		return
+	}
+
+	log.Printf("Client %s goodbye: %s", c.Name, goodbye.Reason)
+	// Connection will be closed after message handling
 }
 
 // addClientToStream adds a client to receive audio
@@ -629,15 +655,28 @@ func (s *Server) addClientToStream(c *client) {
 
 	s.sendMessage(c, "stream/start", streamStart)
 
-	// Send metadata
+	// Send metadata via server/state per spec
 	title, artist, album := s.audioSource.Metadata()
-	metadata := protocol.StreamMetadata{
-		Title:  title,
-		Artist: artist,
-		Album:  album,
+	serverState := protocol.ServerStateMessage{
+		Metadata: &protocol.MetadataState{
+			Timestamp: s.getClockMicros(),
+			Title:     strPtr(title),
+			Artist:    strPtr(artist),
+			Album:     strPtr(album),
+		},
 	}
 
-	s.sendMessage(c, "stream/metadata", metadata)
+	s.sendMessage(c, "server/state", serverState)
+
+	// Send group/update per spec
+	groupID := s.serverID
+	playbackState := "playing"
+	groupUpdate := protocol.GroupUpdate{
+		GroupID:       &groupID,
+		PlaybackState: &playbackState,
+	}
+
+	s.sendMessage(c, "group/update", groupUpdate)
 }
 
 // removeClient removes a client
@@ -656,6 +695,11 @@ func (s *Server) removeClient(c *client) {
 	close(c.sendChan)
 }
 
+// strPtr returns a pointer to the given string
+func strPtr(s string) *string {
+	return &s
+}
+
 // negotiateCodec selects the best codec based on client capabilities
 func (s *Server) negotiateCodec(c *client) string {
 	if c.Capabilities == nil {
@@ -665,28 +709,18 @@ func (s *Server) negotiateCodec(c *client) string {
 	sourceRate := s.audioSource.SampleRate()
 
 	// Prioritize PCM at native rate
-	for _, format := range c.Capabilities.SupportFormats {
+	for _, format := range c.Capabilities.SupportedFormats {
 		if format.Codec == "pcm" && format.SampleRate == sourceRate && format.BitDepth == DefaultBitDepth {
 			return "pcm"
 		}
 	}
 
 	// Consider compressed codecs
-	for _, format := range c.Capabilities.SupportFormats {
+	for _, format := range c.Capabilities.SupportedFormats {
 		if format.Codec == "opus" && sourceRate == 48000 {
 			return "opus"
 		}
 		if format.Codec == "flac" {
-			return "flac"
-		}
-	}
-
-	// Check legacy support
-	for _, codec := range c.Capabilities.SupportCodecs {
-		if codec == "opus" && sourceRate == 48000 {
-			return "opus"
-		}
-		if codec == "flac" {
 			return "flac"
 		}
 	}
@@ -724,14 +758,45 @@ func (s *Server) getClockMicros() int64 {
 	return time.Since(s.clockStart).Microseconds()
 }
 
-// hasRole checks if a client has a specific role
+// hasRole checks if a client has a specific role (handles versioned roles)
 func (s *Server) hasRole(c *client, role string) bool {
 	for _, r := range c.Roles {
-		if r == role {
+		// Match exact role or versioned role (e.g., "player" matches "player@v1")
+		if r == role || strings.HasPrefix(r, role+"@") {
 			return true
 		}
 	}
 	return false
+}
+
+// activateRoles returns the active roles based on client's supported roles
+func (s *Server) activateRoles(supportedRoles []string) []string {
+	// Map role families to their first match
+	activated := make(map[string]string)
+
+	for _, role := range supportedRoles {
+		// Extract role family (e.g., "player" from "player@v1")
+		family := role
+		if idx := strings.Index(role, "@"); idx > 0 {
+			family = role[:idx]
+		}
+
+		// Only keep the first (highest priority) version of each role
+		if _, exists := activated[family]; !exists {
+			// Check if we support this role
+			switch family {
+			case "player", "metadata", "visualizer", "artwork", "controller":
+				activated[family] = role
+			}
+		}
+	}
+
+	// Convert map to slice
+	result := make([]string, 0, len(activated))
+	for _, role := range activated {
+		result = append(result, role)
+	}
+	return result
 }
 
 // createAudioChunk creates a binary audio chunk message

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Sendspin/sendspin-go/internal/protocol"
+	"github.com/Sendspin/sendspin-go/pkg/protocol"
 	"github.com/gorilla/websocket"
 )
 
@@ -150,16 +150,16 @@ func TestServerClientConnection(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// Send client/hello
+	// Send client/hello with versioned roles per spec
 	hello := protocol.Message{
 		Type: "client/hello",
 		Payload: protocol.ClientHello{
 			ClientID:       "test-client-1",
 			Name:           "Test Client",
 			Version:        1,
-			SupportedRoles: []string{"player"},
-			PlayerSupport: &protocol.PlayerSupport{
-				SupportFormats: []protocol.AudioFormat{
+			SupportedRoles: []string{"player@v1"},
+			PlayerV1Support: &protocol.PlayerV1Support{
+				SupportedFormats: []protocol.AudioFormat{
 					{
 						Codec:      "pcm",
 						Channels:   2,
@@ -167,6 +167,8 @@ func TestServerClientConnection(t *testing.T) {
 						BitDepth:   24,
 					},
 				},
+				BufferCapacity:    1048576,
+				SupportedCommands: []string{"volume", "mute"},
 			},
 		},
 	}
@@ -196,6 +198,16 @@ func TestServerClientConnection(t *testing.T) {
 		t.Errorf("expected server name 'Test Server', got %s", serverHello.Name)
 	}
 
+	// Verify active_roles is present per spec
+	if len(serverHello.ActiveRoles) == 0 {
+		t.Error("expected active_roles to be set")
+	}
+
+	// Verify connection_reason is present per spec
+	if serverHello.ConnectionReason == "" {
+		t.Error("expected connection_reason to be set")
+	}
+
 	// Read stream/start
 	if err := conn.ReadJSON(&msg); err != nil {
 		t.Fatalf("failed to read stream/start: %v", err)
@@ -205,13 +217,22 @@ func TestServerClientConnection(t *testing.T) {
 		t.Errorf("expected stream/start, got %s", msg.Type)
 	}
 
-	// Read stream/metadata
+	// Read server/state (replaces stream/metadata per spec)
 	if err := conn.ReadJSON(&msg); err != nil {
-		t.Fatalf("failed to read stream/metadata: %v", err)
+		t.Fatalf("failed to read server/state: %v", err)
 	}
 
-	if msg.Type != "stream/metadata" {
-		t.Errorf("expected stream/metadata, got %s", msg.Type)
+	if msg.Type != "server/state" {
+		t.Errorf("expected server/state, got %s", msg.Type)
+	}
+
+	// Read group/update per spec
+	if err := conn.ReadJSON(&msg); err != nil {
+		t.Fatalf("failed to read group/update: %v", err)
+	}
+
+	if msg.Type != "group/update" {
+		t.Errorf("expected group/update, got %s", msg.Type)
 	}
 
 	// Read audio chunk (binary message)
@@ -229,6 +250,7 @@ func TestServerClientConnection(t *testing.T) {
 		t.Errorf("audio chunk too small: %d bytes", len(data))
 	}
 
+	// Per spec: audio chunks use message type 4 (player role, slot 0)
 	if data[0] != AudioChunkMessageType {
 		t.Errorf("expected message type %d, got %d", AudioChunkMessageType, data[0])
 	}
@@ -291,16 +313,16 @@ func TestServerMultipleClients(t *testing.T) {
 		}
 		clients[i] = conn
 
-		// Send hello
+		// Send hello with versioned roles
 		hello := protocol.Message{
 			Type: "client/hello",
 			Payload: protocol.ClientHello{
 				ClientID:       fmt.Sprintf("test-client-%d", i),
 				Name:           fmt.Sprintf("Test Client %d", i),
 				Version:        1,
-				SupportedRoles: []string{"player"},
-				PlayerSupport: &protocol.PlayerSupport{
-					SupportFormats: []protocol.AudioFormat{
+				SupportedRoles: []string{"player@v1"},
+				PlayerV1Support: &protocol.PlayerV1Support{
+					SupportedFormats: []protocol.AudioFormat{
 						{
 							Codec:      "pcm",
 							Channels:   2,
@@ -308,6 +330,8 @@ func TestServerMultipleClients(t *testing.T) {
 							BitDepth:   24,
 						},
 					},
+					BufferCapacity:    1048576,
+					SupportedCommands: []string{"volume", "mute"},
 				},
 			},
 		}
@@ -383,7 +407,7 @@ func TestServerDuplicateClientID(t *testing.T) {
 			ClientID:       "duplicate-id",
 			Name:           "First Client",
 			Version:        1,
-			SupportedRoles: []string{"player"},
+			SupportedRoles: []string{"player@v1"},
 		},
 	}
 
@@ -422,9 +446,9 @@ func TestServerDuplicateClientID(t *testing.T) {
 	}
 
 	// Verify only one client is registered
-	clients := server.Clients()
-	if len(clients) != 1 {
-		t.Errorf("expected 1 client, got %d", len(clients))
+	serverClients := server.Clients()
+	if len(serverClients) != 1 {
+		t.Errorf("expected 1 client, got %d", len(serverClients))
 	}
 
 	// Stop server

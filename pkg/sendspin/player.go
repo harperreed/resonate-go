@@ -152,7 +152,7 @@ func NewPlayer(config PlayerConfig) (*Player, error) {
 func (p *Player) Connect() error {
 	clientID := uuid.New().String()
 
-	// Configure protocol client
+	// Configure protocol client with spec-compliant formats
 	clientConfig := protocol.Config{
 		ServerAddr: p.serverAddr,
 		ClientID:   clientID,
@@ -163,9 +163,9 @@ func (p *Player) Connect() error {
 			Manufacturer:    p.config.DeviceInfo.Manufacturer,
 			SoftwareVersion: p.config.DeviceInfo.SoftwareVersion,
 		},
-		PlayerSupport: protocol.PlayerSupport{
-			// New spec format - hi-res formats first
-			SupportFormats: []protocol.AudioFormat{
+		PlayerV1Support: protocol.PlayerV1Support{
+			// Per spec: supported_formats in priority order
+			SupportedFormats: []protocol.AudioFormat{
 				// PCM hi-res - highest quality first
 				{Codec: "pcm", Channels: 2, SampleRate: 192000, BitDepth: 24},
 				{Codec: "pcm", Channels: 2, SampleRate: 176400, BitDepth: 24},
@@ -179,18 +179,13 @@ func (p *Player) Connect() error {
 			},
 			BufferCapacity:    1048576,
 			SupportedCommands: []string{"volume", "mute"},
-			// Legacy format (Music Assistant compatibility)
-			SupportCodecs:      []string{"pcm", "opus"},
-			SupportChannels:    []int{2, 1},
-			SupportSampleRates: []int{192000, 176400, 96000, 88200, 48000, 44100},
-			SupportBitDepth:    []int{24, 16},
 		},
-		MetadataSupport: protocol.MetadataSupport{
-			SupportPictureFormats: []string{"jpeg", "png", "webp"},
-			MediaWidth:            600,
-			MediaHeight:           600,
+		ArtworkV1Support: &protocol.ArtworkV1Support{
+			Channels: []protocol.ArtworkChannel{
+				{Source: "album", Format: "jpeg", MediaWidth: 600, MediaHeight: 600},
+			},
 		},
-		VisualizerSupport: protocol.VisualizerSupport{
+		VisualizerV1Support: &protocol.VisualizerV1Support{
 			BufferCapacity: 1048576,
 		},
 	}
@@ -212,10 +207,12 @@ func (p *Player) Connect() error {
 
 	// Start component goroutines
 	go p.handleStreamStart()
+	go p.handleStreamClear()
+	go p.handleStreamEnd()
 	go p.handleAudioChunks()
 	go p.handleControls()
-	go p.handleMetadata()
-	go p.handleSessionUpdates()
+	go p.handleServerState()
+	go p.handleGroupUpdates()
 	go p.clockSyncLoop()
 
 	return nil
@@ -423,16 +420,69 @@ func (p *Player) handleControls() {
 	}
 }
 
-// handleMetadata processes metadata updates
-func (p *Player) handleMetadata() {
+// handleStreamClear processes stream/clear messages (for seek)
+func (p *Player) handleStreamClear() {
 	for {
 		select {
-		case meta := <-p.client.Metadata:
-			if p.config.OnMetadata != nil {
+		case clear := <-p.client.StreamClear:
+			log.Printf("Stream clear received for roles: %v", clear.Roles)
+			// Clear buffers if player role is specified (or if empty = all roles)
+			if len(clear.Roles) == 0 || containsRole(clear.Roles, "player") {
+				if p.scheduler != nil {
+					p.scheduler.Clear()
+				}
+			}
+
+		case <-p.ctx.Done():
+			return
+		}
+	}
+}
+
+// handleStreamEnd processes stream/end messages
+func (p *Player) handleStreamEnd() {
+	for {
+		select {
+		case end := <-p.client.StreamEnd:
+			log.Printf("Stream end received for roles: %v", end.Roles)
+			// Stop playback if player role is specified (or if empty = all roles)
+			if len(end.Roles) == 0 || containsRole(end.Roles, "player") {
+				p.state.State = "idle"
+				p.notifyStateChange()
+			}
+
+		case <-p.ctx.Done():
+			return
+		}
+	}
+}
+
+// containsRole checks if a role is in the list
+func containsRole(roles []string, role string) bool {
+	for _, r := range roles {
+		if r == role {
+			return true
+		}
+	}
+	return false
+}
+
+// handleServerState processes server/state messages (includes metadata)
+func (p *Player) handleServerState() {
+	for {
+		select {
+		case state := <-p.client.ServerState:
+			if state.Metadata != nil && p.config.OnMetadata != nil {
+				meta := state.Metadata
 				p.config.OnMetadata(Metadata{
-					Title:  meta.Title,
-					Artist: meta.Artist,
-					Album:  meta.Album,
+					Title:       derefString(meta.Title),
+					Artist:      derefString(meta.Artist),
+					Album:       derefString(meta.Album),
+					AlbumArtist: derefString(meta.AlbumArtist),
+					ArtworkURL:  derefString(meta.ArtworkURL),
+					Track:       derefInt(meta.Track),
+					Year:        derefInt(meta.Year),
+					Duration:    getDurationSeconds(meta.Progress),
 				})
 			}
 
@@ -442,28 +492,46 @@ func (p *Player) handleMetadata() {
 	}
 }
 
-// handleSessionUpdates processes session updates
-func (p *Player) handleSessionUpdates() {
+// handleGroupUpdates processes group/update messages
+func (p *Player) handleGroupUpdates() {
 	for {
 		select {
-		case update := <-p.client.SessionUpdate:
-			if update.Metadata != nil && p.config.OnMetadata != nil {
-				p.config.OnMetadata(Metadata{
-					Title:       update.Metadata.Title,
-					Artist:      update.Metadata.Artist,
-					Album:       update.Metadata.Album,
-					AlbumArtist: update.Metadata.AlbumArtist,
-					ArtworkURL:  update.Metadata.ArtworkURL,
-					Track:       update.Metadata.Track,
-					Year:        update.Metadata.Year,
-					Duration:    update.Metadata.TrackDuration,
-				})
+		case update := <-p.client.GroupUpdate:
+			if update.PlaybackState != nil {
+				log.Printf("Group playback state: %s", *update.PlaybackState)
+			}
+			if update.GroupID != nil {
+				log.Printf("Joined group: %s", *update.GroupID)
 			}
 
 		case <-p.ctx.Done():
 			return
 		}
 	}
+}
+
+// derefString safely dereferences a string pointer
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+// derefInt safely dereferences an int pointer
+func derefInt(i *int) int {
+	if i == nil {
+		return 0
+	}
+	return *i
+}
+
+// getDurationSeconds extracts duration in seconds from progress
+func getDurationSeconds(p *protocol.ProgressState) int {
+	if p == nil {
+		return 0
+	}
+	return p.TrackDuration / 1000
 }
 
 // Play starts or resumes playback
@@ -475,8 +543,9 @@ func (p *Player) Play() error {
 	p.state.State = "playing"
 	p.notifyStateChange()
 
-	return p.client.SendState(protocol.ClientState{
-		State:  "playing",
+	// Per spec: player state is "synchronized" or "error"
+	return p.client.SendState(protocol.PlayerState{
+		State:  "synchronized",
 		Volume: p.state.Volume,
 		Muted:  p.state.Muted,
 	})
@@ -491,8 +560,9 @@ func (p *Player) Pause() error {
 	p.state.State = "paused"
 	p.notifyStateChange()
 
-	return p.client.SendState(protocol.ClientState{
-		State:  "idle",
+	// Per spec: player state is "synchronized" or "error"
+	return p.client.SendState(protocol.PlayerState{
+		State:  "synchronized",
 		Volume: p.state.Volume,
 		Muted:  p.state.Muted,
 	})
@@ -507,8 +577,9 @@ func (p *Player) Stop() error {
 	p.state.State = "idle"
 	p.notifyStateChange()
 
-	return p.client.SendState(protocol.ClientState{
-		State:  "idle",
+	// Per spec: player state is "synchronized" or "error"
+	return p.client.SendState(protocol.PlayerState{
+		State:  "synchronized",
 		Volume: p.state.Volume,
 		Muted:  p.state.Muted,
 	})
@@ -530,10 +601,10 @@ func (p *Player) SetVolume(volume int) error {
 		oto.SetVolume(volume)
 	}
 
-	// Send state to server
+	// Send state to server per spec
 	if p.client != nil && p.state.Connected {
-		p.client.SendState(protocol.ClientState{
-			State:  p.state.State,
+		p.client.SendState(protocol.PlayerState{
+			State:  "synchronized",
 			Volume: volume,
 			Muted:  p.state.Muted,
 		})
@@ -552,10 +623,10 @@ func (p *Player) Mute(muted bool) error {
 		oto.SetMuted(muted)
 	}
 
-	// Send state to server
+	// Send state to server per spec
 	if p.client != nil && p.state.Connected {
-		p.client.SendState(protocol.ClientState{
-			State:  p.state.State,
+		p.client.SendState(protocol.PlayerState{
+			State:  "synchronized",
 			Volume: p.state.Volume,
 			Muted:  muted,
 		})
@@ -596,6 +667,8 @@ func (p *Player) Close() error {
 	p.cancel()
 
 	if p.client != nil {
+		// Send goodbye before closing per spec
+		p.client.SendGoodbye("shutdown")
 		p.client.Close()
 	}
 
